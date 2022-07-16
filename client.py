@@ -1,8 +1,11 @@
 import pygame
+import tkinter as tk
 import numpy as np
 import sys
 import math
 import utils
+import socket
+import threading
 
 COLORS = {
     'BLACK':    [0, 0, 0],
@@ -21,23 +24,72 @@ class ClientGUI:
         self.id = id
 
         # if given size is not a tupple, a list or have not 2 dims
-        if not isinstance(size, tuple) or not isinstance(size, list) or len(size) != 2:
+        if not ( isinstance(size, tuple) or isinstance(size, list) ) or len(size) != 2:
             size = (6, 10)
         self.rows = size[0]
         self.cols = size[1]
         self.board = np.zeros( size, dtype=np.int8 )               #   define the main board state object
 
         self.square_size = 80                       #   size of squares
-        self.radius = int(self.square_size/2 - 5)   #   size of circle radius based on the squares
+        # # if self.rows > 8 or self.cols > 10:
+        # #     self.square_size = 50
+        # self.radius = int(self.square_size/2 - 5)   #   size of circle radius based on the squares
 
-        #    calc the total width and height based on the squares size
-        self.width = self.cols * self.square_size
-        self.height = (self.rows + 1) * self.square_size
+        # #    calc the total width and height based on the squares size
+        # self.width = self.cols * self.square_size
+        # self.height = (self.rows + 1) * self.square_size
 
-        self.my_color = 'YELLOW'
+        self.calc_window_size()
+
+        self.turn = self.id % 2 == 0
+        self.my_color = 'YELLOW' if self.id % 2 else 'RED'
+        self.other_color = 'RED' if self.id % 2 else 'YELLOW'
         
+        self.create_socket()
         self.create_gui()   #   create the gui
+
+        threadEl = threading.Thread(target=self.wait_for_other_player, args=( ))
+        threadEl.daemon = True # without the daemon parameter, the function in parallel will continue even your main program ends
+        threadEl.start()
+
         self.run_game()     #   run the main game loop
+
+    
+    def is_my_turn(self):
+        return self.turn
+
+
+    def create_socket(self):
+        self.client_socket = socket.socket()
+        self.port = 1234
+        self.host = '127.0.0.1'
+    # self.host = socket.gethostname()
+
+        try:
+            self.client_socket.connect( (self.host, self.port) )
+        except socket.error as e:
+            print('cli-error',e)
+            self.client_socket.close()
+
+
+    '''
+        calculate the size of the window, and adjust the circles size based on the users screen size
+    '''
+    def calc_window_size(self):
+        win = tk.Tk()
+        width, height = win.winfo_screenwidth(), win.winfo_screenheight()
+
+        while True:
+            #    calc the total width and height based on the squares size
+            self.width = self.cols * self.square_size
+            self.height = (self.rows + 1) * self.square_size
+
+            self.radius = int(self.square_size/2 - 5)   #   size of circle radius based on the squares
+
+            if not (self.width > width or self.height > height - 80):
+                break
+
+            self.square_size -= 10
 
     
     '''
@@ -50,7 +102,7 @@ class ClientGUI:
         self.main_display = pygame.display.set_mode((self.width, self.height), 0, 32)
         self.main_display.fill(COLORS['BLACK'])
         pygame.display.update()
-        pygame.display.set_caption('Client XXX___XXX')
+        pygame.display.set_caption('Client {}'.format(self.id))
 
         self.draw_board()   #   draw the board itself
 
@@ -76,9 +128,9 @@ class ClientGUI:
 
                 # if cell of player1
                 if self.board[r][c] == 1:
-                    color_to_use = COLORS['RED']
+                    color_to_use = self.my_color
                 elif self.board[r][c] == 2:
-                    color_to_use = COLORS['YELLOW']
+                    color_to_use = self.other_color
                 else:
                     color_to_use = COLORS['BLACK']
 
@@ -97,9 +149,52 @@ class ClientGUI:
     def clear_top(self):
         pygame.draw.rect(self.main_display, COLORS['BLACK'], (0, 0, self.width, self.square_size))
 
+
+    
+    def wait_for_other_player(self):
+        while True:
+            try:
+                self.client_socket.settimeout(0.2)
+                data = self.client_socket.recv(1024)
+                if not data:
+                    continue
+
+                if int(data.decode('utf-8')) == -1:
+                    print('client', self.id, 'closing')
+                    self.client_socket.close()
+
+                elif not self.is_my_turn():
+                    print('client', self.id, 'recv on wait',  data.decode('utf-8'))
+                    self.add_piece(int(data))
+                    self.draw_board()
+                    self.turn = not self.turn
+            except socket.error as e:
+                pass
+
+
     
     def run_game(self):
         while True:
+            # if not self.is_my_turn():
+            #     try:
+            #         self.client_socket.settimeout(0.2)
+            #         data = self.client_socket.recv(1024)
+            #         if data:
+            #             self.client_socket.settimeout(None)
+            #             print('client', self.id, 'recv on wait',  data.decode('utf-8'))
+            #             self.add_piece(int(data))
+            #             self.draw_board()
+            #             self.turn = not self.turn
+            #     except socket.error as e:
+            #         pass
+
+            # if not self.is_my_turn():
+            #     data = self.client_socket.recv(1024)
+            #     print('client', self.id, 'recv on wait',  data.decode('utf-8'))
+            #     self.add_piece(int(data))
+            #     self.draw_board()
+            #     self.turn = not self.turn
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
@@ -115,25 +210,22 @@ class ClientGUI:
                     posx = event.pos[0]     #   get x coordinate of the mouse
                     col = int(math.floor(posx / self.square_size))
     
-                    if self.is_valid_location(col):
+                    if self.is_my_turn() and self.is_valid_location(col):
+                        self.client_socket.send(bytes(str(col), 'utf8'))
+                        print('sent col {} to server'.format(col))
                         self.add_piece(col)
                         self.draw_board()
+                        self.turn = not self.turn
                         check = utils.check_board(self.board, self.id)
                         print('send data to server, check if win', col, 'checked=', check)
-
-
-
-                        self.id = 1 if self.id == 2 else 2
-
-                        
 
                 if event.type == pygame.MOUSEMOTION or event.type == pygame.MOUSEBUTTONUP:
                     self.clear_top()
                     posx = event.pos[0] #   get x coordinate of the mouse
                     col = int(math.floor(posx / self.square_size))
                     color_to_use = COLORS[self.my_color] if self.is_valid_location(col) else COLORS['GRAY']
-                    posx = col * self.square_size + self.radius
-                    pygame.draw.circle(self.main_display, color_to_use, (posx, int(self.square_size/2)), self.radius)  #   draw circle on top of the board
+                    circlex = col * self.square_size + self.square_size / 2
+                    pygame.draw.circle(self.main_display, color_to_use, (circlex, int(self.square_size/2)), self.radius)  #   draw circle on top of the board
 
                 if event.type == pygame.WINDOWLEAVE:
                     #   clears the top row with black rectangle when the mouse leaves the window
@@ -168,9 +260,9 @@ class ClientGUI:
         fliped_board = np.flip(self.board, 0)       #   flip the board so it will be checked from top to bottom
         for r in range(self.rows):
             if fliped_board[r, col] == 0:
-                fliped_board[r, col] = self.id
+                fliped_board[r, col] = 1 if self.is_my_turn() else 2
                 break
         
         self.board = np.flip(fliped_board, 0)         #   flip the board back to suit fot the game
 
-        print(self.board)
+        # print(self.board)
