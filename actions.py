@@ -2,10 +2,12 @@ import enum
 
 class Actions(enum.Enum):
     EXIT =              -1
-    WIN =               1
-    CONTINUE =          2
-    ADD_PIECE =         3
-    ILLEGAL_LOCATION =  4
+    READY =             1
+    WIN =               2
+    TIE =               3
+    CONTINUE =          4
+    ADD_PIECE =         5
+    ILLEGAL_LOCATION =  6
 
 
     ILLEGAL_DATA =      8

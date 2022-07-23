@@ -2,7 +2,7 @@ import numpy as np
 import socket
 
 
-def check_board(board, target, n=4):
+def is_won(board, target, n=4):
     board = np.array(board)     #   force to numpy
     if board.ndim != 2:
         return False
@@ -49,6 +49,12 @@ def check_board(board, target, n=4):
     return check_rows(board) or check_cols(board) or check_diags(board)
 
 
+'''
+    check if the board is full, meaning there is no more space to add pieces
+'''
+def is_board_full(board):
+    return not np.any(board == 0)
+
 def is_even(num):
     return num % 2 == 0
 
@@ -85,18 +91,33 @@ def is_valid_location(loc, board):
     return False
 
 
-def wait_for_data(conn):
+def wait_for_data(conn, timeout=None):
     try:
+        conn.settimeout(timeout)
         data = conn.recv(1024)
         print('wait_for_data: received=', data.decode('utf-8'), 'from', conn)
         if not data:
             return None
     except socket.error as e:
-        print('wait_for_data: return none')
-        conn.close()
         return None
     print('wait_for_data: return', data)
     return data
+
+
+# def is_socket_closed(sock: socket.socket) -> bool:
+#     try:
+#         # this will try to read bytes without blocking and also without removing them from buffer (peek only)
+#         data = sock.recv(16, socket.MSG_DONTWAIT | socket.MSG_PEEK)
+#         if len(data) == 0:
+#             return True
+#     except BlockingIOError:
+#         return False  # socket is open and reading from it would block
+#     except ConnectionResetError:
+#         return True  # socket was closed for some other reason
+#     except Exception as e:
+#         # logger.exception("unexpected exception when checking if a socket is closed")
+#         return False
+#     return False
 
 
 
@@ -112,9 +133,9 @@ if __name__ == '__main__':
         a[5, 2] = 1
         a[5, 3] = 1
 
-        assert(check_board(a, target=1, n=4))
-        assert(not check_board(a, target=1, n=5))
-        assert(not check_board(a, target=2, n=4))
+        assert(is_won(a, target=1, n=4))
+        assert(not is_won(a, target=1, n=5))
+        assert(not is_won(a, target=2, n=4))
 
 
         # assert columns
@@ -124,9 +145,9 @@ if __name__ == '__main__':
         b[4, 4] = 1
         b[5, 4] = 1
 
-        assert(check_board(b, target=1, n=4))
-        assert(not check_board(b, target=1, n=5))
-        assert(not check_board(b, target=2, n=4))
+        assert(is_won(b, target=1, n=4))
+        assert(not is_won(b, target=1, n=5))
+        assert(not is_won(b, target=2, n=4))
 
 
         # assert diagonals
@@ -136,9 +157,9 @@ if __name__ == '__main__':
         c[4, 6] = 1
         c[5, 7] = 1
 
-        assert(check_board(c, target=1, n=4))
-        assert(not check_board(c, target=1, n=5))
-        assert(not check_board(c, target=2, n=4))
+        assert(is_won(c, target=1, n=4))
+        assert(not is_won(c, target=1, n=5))
+        assert(not is_won(c, target=2, n=4))
 
 
         # assert flipped diagonals
@@ -148,8 +169,8 @@ if __name__ == '__main__':
         d[4, 2] = 1
         d[5, 1] = 1
 
-        assert(check_board(d, target=1, n=4))
-        assert(not check_board(d, target=1, n=5))
-        assert(not check_board(d, target=2, n=4))
+        assert(is_won(d, target=1, n=4))
+        assert(not is_won(d, target=1, n=5))
+        assert(not is_won(d, target=2, n=4))
 
     test()

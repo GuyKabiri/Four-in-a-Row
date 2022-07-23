@@ -31,6 +31,7 @@ class ClientGUI:
         self.cols = size[1]
         self.board = np.zeros( size, dtype=np.int8 )               #   define the main board state object
         self.turn = 1
+        self.state = Actions.READY
 
         self.square_size = 80                       #   size of squares
         # # if self.rows > 8 or self.cols > 10:
@@ -146,6 +147,16 @@ class ClientGUI:
     def clear_top(self):
         pygame.draw.rect(self.main_display, COLORS['BLACK'], (0, 0, self.width, self.square_size))
 
+    def add_text(self, txt):
+        font = pygame.font.Font('freesansbold.ttf', 32)
+        color_to_use = self.get_turn_color() if self.state == Actions.WIN else 'GRAY'
+        text = font.render(txt, True, COLORS[color_to_use], COLORS['BLACK'])
+        textRect = text.get_rect()
+        textRect.center = (self.width // 2, self.square_size - (self.square_size // 3))
+        self.main_display.blit(text, textRect)
+        # pygame.draw.rect(self.main_display, COLORS['BLACK'], (0, 0, self.width, self.square_size))
+
+
 
     
     # def wait_for_other_player(self):
@@ -170,41 +181,39 @@ class ClientGUI:
     #         except socket.error as e:
     #             pass
 
+    def exit(self, should_send=False):
+        if should_send:
+            self.client_socket.send(bytes(str(Actions.EXIT.value), 'utf8'))
+        self.client_socket.close()
+        pygame.quit()
+        sys.exit()
+
 
     
     def run_game(self):
+        self.client_socket.send(bytes(str(Actions.READY.value), 'utf8'))
+
         action = Actions.UNKNOWN
         while True:
-            # if not self.is_my_turn():
-            #     try:
-            #         self.client_socket.settimeout(0.2)
-            #         data = self.client_socket.recv(1024)
-            #         if data:
-            #             self.client_socket.settimeout(None)
-            #             print('client', self.id, 'recv on wait',  data.decode('utf-8'))
-            #             self.add_piece(int(data))
-            #             self.draw_board()
-            #             self.turn = not self.turn
-            #     except socket.error as e:
-            #         pass
 
-            # if not self.is_my_turn():
-            #     data = self.client_socket.recv(1024)
-            #     print('client', self.id, 'recv on wait',  data.decode('utf-8'))
-            #     self.add_piece(int(data))
-            #     self.draw_board()
-            #     self.turn = not self.turn
+            is_exit =  utils.wait_for_data(self.client_socket, 0.01)
+            if is_exit and Actions.EXIT.is_equals(is_exit):
+                print('client({}) got exit'.format(self.id))
+                self.exit()
+
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
+                    print('pygame exit')
+                    self.exit(should_send=True)
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        pygame.quit()
-                        sys.exit()
+                        print('esc exit')
+                        self.exit(should_send=True)
 
-                if event.type == pygame.MOUSEBUTTONUP:
+
+                if event.type == pygame.MOUSEBUTTONUP and self.state == Actions.READY:
+                    print('client({}) mouse button up event'.format(self.id))
                     #print(event.pos)
 
                     posx = event.pos[0]     #   get x coordinate of the mouse
@@ -212,36 +221,50 @@ class ClientGUI:
     
                     self.client_socket.send(bytes(str(self.turn), 'utf8'))
                     self.client_socket.send(bytes(str(col), 'utf8'))
+
+                    print('client({}) sent turn={}, col={}'.format(self.id, self.turn, col))
                     
                     action = utils.wait_for_data(self.client_socket)
-                    if action == None:
-                        continue #########################################
+
+                    print('client({}) recv action={}'.format(self.id, Actions(int(action))))
+                    if Actions.EXIT.is_equals(action):
+                        print('client({}) got exit'.format(self.id))
+                        self.exit()
                     if Actions.ADD_PIECE.is_equals(action):
                         utils.add_piece(self.board, col, self.turn)
                         self.draw_board()
 
                         continue_or_win = utils.wait_for_data(self.client_socket)
-                        if not continue_or_win:
-                            continue            ##############################################################                        
+                        print('client({}) recv action={}'.format(self.id, Actions(int(continue_or_win))))
+                        if Actions.EXIT.is_equals(action):
+                            print('client({}) got exit'.format(self.id))
+                            self.exit()                   
                         elif Actions.WIN.is_equals(continue_or_win):
-                            pass
+                            self.clear_top()
+                            self.state = Actions.WIN
+                            self.add_text('{} won!'.format(self.get_turn_color()))
+                        elif Actions.TIE.is_equals(continue_or_win):
+                            self.clear_top()
+                            self.state = Actions.TIE
+                            self.add_text("It's a tie!")
                         elif Actions.CONTINUE.is_equals(continue_or_win):
                             self.turn = 2 if self.turn == 1 else 1
-                            print('turns=', self.turn)
+                            print('client({}) current turn({})'.format(self.id, self.turn))
 
+                if self.state == Actions.READY:
 
-                if event.type == pygame.MOUSEMOTION or event.type == pygame.MOUSEBUTTONUP:
-                    self.clear_top()
-                    posx = event.pos[0] #   get x coordinate of the mouse
-                    col = int(math.floor(posx / self.square_size))
-                    curr_color = self.get_turn_color()
-                    color_to_use = COLORS[curr_color] if utils.is_valid_location(col, self.board) else COLORS['GRAY']
-                    circlex = col * self.square_size + self.square_size / 2
-                    pygame.draw.circle(self.main_display, color_to_use, (circlex, int(self.square_size/2)), self.radius)  #   draw circle on top of the board
+                    if event.type == pygame.MOUSEMOTION or event.type == pygame.MOUSEBUTTONUP:
+                        self.clear_top()
+                        posx = event.pos[0] #   get x coordinate of the mouse
+                        col = int(math.floor(posx / self.square_size))
+                        curr_color = self.get_turn_color()
+                        color_to_use = COLORS[curr_color] if utils.is_valid_location(col, self.board) else COLORS['GRAY']
+                        circlex = col * self.square_size + self.square_size / 2
+                        pygame.draw.circle(self.main_display, color_to_use, (circlex, int(self.square_size/2)), self.radius)  #   draw circle on top of the board
 
-                if event.type == pygame.WINDOWLEAVE:
-                    #   clears the top row with black rectangle when the mouse leaves the window
-                    self.clear_top()
+                    if event.type == pygame.WINDOWLEAVE:
+                        #   clears the top row with black rectangle when the mouse leaves the window
+                        self.clear_top()
                 
                 
                 pygame.display.update()     # update the main display for mouse events

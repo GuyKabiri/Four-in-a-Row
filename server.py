@@ -4,7 +4,7 @@ import os
 import time
 from typing import Tuple
 from client import ClientGUI
-import threading, multiprocessing
+import threading, multiprocessing, threading
 from _thread import *
 import socket
 import numpy as np
@@ -22,7 +22,7 @@ class ServerGUI(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
 
-        self.sockets = []
+        self.clients = []
 
         self.title('Four in a Row Server')
         self.geometry('{}x{}'.format(ServerGUI.HEIGHT, ServerGUI.WIDTH))
@@ -34,16 +34,20 @@ class ServerGUI(tk.Tk):
         self.generate_game_button = tk.Button(text='Start Play', command=self.create_game)
         self.generate_game_button.grid(row=0, column=0, sticky=tk.W, columnspan=3)
 
-        self.rowsBox = tk.Spinbox(from_=5, to=10, width=2)
-        self.colsBox = tk.Spinbox(from_=5, to=10, width=2)
+        # self.rowsBox = tk.Spinbox(from_=5, to=10, width=2)
+        # self.colsBox = tk.Spinbox(from_=5, to=10, width=2)
+
+        self.rowsBox = tk.Spinbox(from_=2, to=10, width=2)
+        self.colsBox = tk.Spinbox(from_=2, to=10, width=2)
 
         self.rowsBox.grid(row=1, column=0, sticky=tk.W,)
         tk.Label(text="X").grid(row=1, column=1)
         self.colsBox.grid(row=1, column=2, sticky=tk.W,)
 
-        threadEl = threading.Thread(target=self.create_server_socket, args=( ))
-        threadEl.daemon = True # without the daemon parameter, the function in parallel will continue even your main program ends
-        threadEl.start()
+        # threadEl = threading.Thread(target=self.create_server_socket, args=( ))
+        # threadEl.daemon = True # without the daemon parameter, the function in parallel will continue even your main program ends
+        # threadEl.start()
+        self.create_server_socket()
 
         self.client_id = 0
 
@@ -55,22 +59,31 @@ class ServerGUI(tk.Tk):
         self.client_id += 1
         client_process = multiprocessing.Process(target=ClientGUI, args=(self.client_id, (rows, cols)))
         client_process.start()
-        print('client opened', self.client_id)
+        print('client({}) opened'.format(self.client_id))
 
-        while True:
-            client, address = self.server_socket.accept()
-            server.sockets.append(client)
-            print('Connected to: ' + address[0] + ':' + str(address[1]))
-            start_new_thread(run_client, (client, (rows, cols), ))
+        client, address = self.server_socket.accept()
+    
+        # thread = start_new_thread(self.run_client, (client, (rows, cols), ))
+        thread = threading.Thread(target=self.run_client, daemon=True, args=(client, (rows, cols), ))
+        thread.start()
+
+        self.clients.append(( client, thread ))
+        print('Connected to: ' + address[0] + ':' + str(address[1]))
 
 
     
     def close_all(self):
         
         print("send 'close' message to ALL clients, close the connection and exit")
-
-        for conn in self.sockets:
-            conn.send(bytes(str(Actions.EXIT.value), 'utf8'))
+        count = 1
+        for (conn, thrd) in self.clients:
+            print(count, conn)
+            count += 1
+            try:
+                conn.send(bytes(str(Actions.EXIT.value), 'utf8'))
+                conn.close()
+            except Exception as e:
+                print('{} has already been closed, {}'.format(conn, e))
         self.server_socket.close()
 
         self.destroy()
@@ -93,38 +106,55 @@ class ServerGUI(tk.Tk):
         # server_socket.close()
 
 
-def run_client(conn, size):
-    state = np.zeros( size, dtype=np.int8 )
+    def run_client(self, conn, size):
+        state = np.zeros( size, dtype=np.int8 )
+        while True:
+            wait_to_ready = utils.wait_for_data(conn, 0.1)
+            if wait_to_ready and Actions.READY.is_equals(wait_to_ready):
+                break
 
-    while True:
-        turn_to_add = utils.wait_for_data(conn)
-        col_to_add = utils.wait_for_data(conn)
+        while True:
+            turn_to_add = utils.wait_for_data(conn)
 
-        if not turn_to_add or not col_to_add:
-            print('server sent illegal_data')
-            conn.send(bytes(str(Actions.ILLEGAL_DATA.value), 'utf8'))
-        
-        print('server got turn({}), col({})'.format(turn_to_add, col_to_add))
+            if turn_to_add and Actions.EXIT.is_equals(turn_to_add):
+                print('server got exit')
+                break
 
-        turn_to_add, col_to_add = int(turn_to_add), int(col_to_add)
+            col_to_add = utils.wait_for_data(conn)
 
-        if not utils.is_valid_location(col_to_add, state):
-            print('server send illegal_location')
-            conn.send(bytes(str(Actions.ILLEGAL_LOCATION.value), 'utf8'))
+            if not turn_to_add or not col_to_add:
+                break
+            
+            print('server got turn({}), col({})'.format(turn_to_add, col_to_add))
 
-        print('legal location')
-        
-        state = utils.add_piece(state, col_to_add, turn_to_add)
-        print('piece added')
-        conn.send(bytes(str(Actions.ADD_PIECE.value), 'utf8'))
+            turn_to_add, col_to_add = int(turn_to_add), int(col_to_add)
 
-        if utils.check_board(state, turn_to_add):
-            print('server send win')
-            conn.send(bytes(str(Actions.WIN.value), 'utf8'))
-        else:
-            print('server send continue')
-            conn.send(bytes(str(Actions.CONTINUE.value), 'utf8'))
+            if not utils.is_valid_location(col_to_add, state):
+                print('server send illegal_location')
+                conn.send(bytes(str(Actions.ILLEGAL_LOCATION.value), 'utf8'))
+                continue
 
+            print('legal location')
+            
+            state = utils.add_piece(state, col_to_add, turn_to_add)
+            print('piece added')
+            conn.send(bytes(str(Actions.ADD_PIECE.value), 'utf8'))
+
+            if utils.is_won(state, turn_to_add):
+                print('server send win')
+                conn.send(bytes(str(Actions.WIN.value), 'utf8'))
+            elif utils.is_board_full(state):
+                print('server send tie')
+                conn.send(bytes(str(Actions.TIE.value), 'utf8'))
+            else:
+                print('server send continue')
+                conn.send(bytes(str(Actions.CONTINUE.value), 'utf8'))
+
+        # try:
+        #     print('closing', conn)
+        #     conn.close()
+        # except Exception as e:
+        #     print(e)
     
 
 
