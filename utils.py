@@ -1,4 +1,5 @@
 import numpy as np
+import socket
 
 
 def check_board(board, target, n=4):
@@ -46,6 +47,56 @@ def check_board(board, target, n=4):
         return False
 
     return check_rows(board) or check_cols(board) or check_diags(board)
+
+
+def is_even(num):
+    return num % 2 == 0
+
+
+'''
+    adds a piece in a given column if not full
+'''
+def add_piece(board, col, turn):
+    rows, cols = board.shape
+    if not cols > col >= 0:
+        return
+    
+    fliped_board = np.flip(board, 0)       #   flip the board so it will be checked from top to bottom
+    for r in range(rows):
+        if fliped_board[r, col] == 0:
+            fliped_board[r, col] = turn
+            break
+    
+    board = np.flip(fliped_board, 0)         #   flip the board back to suit fot the game
+    # print(self.board)
+
+    return board
+
+
+'''
+    checks if a column is valid location and has space to add an circle 
+'''
+def is_valid_location(loc, board):
+    cols = board.shape[1]
+    
+    if cols > loc >= 0:
+        return board[0, loc] == 0  # if the top row at this column is not taken
+    
+    return False
+
+
+def wait_for_data(conn):
+    try:
+        data = conn.recv(1024)
+        print('wait_for_data: received=', data.decode('utf-8'), 'from', conn)
+        if not data:
+            return None
+    except socket.error as e:
+        print('wait_for_data: return none')
+        conn.close()
+        return None
+    print('wait_for_data: return', data)
+    return data
 
 
 
