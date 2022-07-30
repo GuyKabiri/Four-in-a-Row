@@ -1,4 +1,4 @@
-from ctypes import util
+from http import client
 import tkinter as tk
 import os
 import time
@@ -25,6 +25,7 @@ class ServerGUI(tk.Tk):
         self.clients = []
 
         self.title('Four in a Row Server')
+        self.iconphoto(False, tk.PhotoImage(file='icon.png'))
         self.geometry('{}x{}'.format(ServerGUI.HEIGHT, ServerGUI.WIDTH))
         self.minsize(ServerGUI.HEIGHT, ServerGUI.WIDTH)
         self.maxsize(ServerGUI.HEIGHT, ServerGUI.WIDTH)
@@ -67,23 +68,32 @@ class ServerGUI(tk.Tk):
         thread = threading.Thread(target=self.run_client, daemon=True, args=(client, (rows, cols), ))
         thread.start()
 
-        self.clients.append(( client, thread ))
+        # self.clients.append(( client, thread ))
+        self.clients.append(client)
         print('Connected to: ' + address[0] + ':' + str(address[1]))
 
 
     
     def close_all(self):
-        
-        print("send 'close' message to ALL clients, close the connection and exit")
         count = 1
-        for (conn, thrd) in self.clients:
-            print(count, conn)
+        # for (conn, thrd) in self.clients:
+        index = 0
+        print('server close_all: num of client=', len(self.clients))
+
+        for conn in self.clients:
+            print('server closing', count, conn)
             count += 1
+            addr = ''
             try:
+                # addr = conn.gethostname()
                 conn.send(bytes(str(Actions.EXIT.value), 'utf8'))
                 conn.close()
             except Exception as e:
-                print('{} has already been closed, {}'.format(conn, e))
+                print('server: {} has already been closed, {}'.format(count, e))
+                continue
+            print(addr, 'closed')
+        
+        print('server closing server conn')
         self.server_socket.close()
 
         self.destroy()
@@ -111,13 +121,14 @@ class ServerGUI(tk.Tk):
         while True:
             wait_to_ready = utils.wait_for_data(conn, 0.1)
             if wait_to_ready and Actions.READY.is_equals(wait_to_ready):
+                print('client is ready', conn)
                 break
 
         while True:
             turn_to_add = utils.wait_for_data(conn)
 
             if turn_to_add and Actions.EXIT.is_equals(turn_to_add):
-                print('server got exit')
+                print('server recv exit')
                 break
 
             col_to_add = utils.wait_for_data(conn)
@@ -151,7 +162,8 @@ class ServerGUI(tk.Tk):
                 conn.send(bytes(str(Actions.CONTINUE.value), 'utf8'))
 
         # try:
-        #     print('closing', conn)
+        #     print('closing client conn from server side', conn)
+        #     self.clients.remove(conn)
         #     conn.close()
         # except Exception as e:
         #     print(e)

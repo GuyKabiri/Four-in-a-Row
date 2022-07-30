@@ -94,6 +94,9 @@ class ClientGUI:
         creates the client gui
     '''
     def create_gui(self):
+        icon = pygame.image.load('icon.png')
+        pygame.display.set_icon(icon)
+
         pygame.init()   # initiate the pyGame module
 
         #   create the main display with black background
@@ -183,7 +186,9 @@ class ClientGUI:
 
     def exit(self, should_send=False):
         if should_send:
+            print('client({}) send close to server'.format(self.id))
             self.client_socket.send(bytes(str(Actions.EXIT.value), 'utf8'))
+        print('client({}) closing conn from client side'.format(self.id))
         self.client_socket.close()
         pygame.quit()
         sys.exit()
@@ -198,17 +203,17 @@ class ClientGUI:
 
             is_exit =  utils.wait_for_data(self.client_socket, 0.01)
             if is_exit and Actions.EXIT.is_equals(is_exit):
-                print('client({}) got exit'.format(self.id))
+                print('client({}) recv exit'.format(self.id))
                 self.exit()
 
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    print('pygame exit')
+                    print('client({}), pygame exit event'.format(self.id))
                     self.exit(should_send=True)
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        print('esc exit')
+                        print('client({}), esc exit'.format(self.id))
                         self.exit(should_send=True)
 
 
@@ -242,7 +247,7 @@ class ClientGUI:
                         elif Actions.WIN.is_equals(continue_or_win):
                             self.clear_top()
                             self.state = Actions.WIN
-                            self.add_text('{} won!'.format(self.get_turn_color()))
+                            self.add_text('client({}), {} won!'.format(self.id, self.get_turn_color()))
                         elif Actions.TIE.is_equals(continue_or_win):
                             self.clear_top()
                             self.state = Actions.TIE
