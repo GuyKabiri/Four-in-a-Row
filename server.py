@@ -1,9 +1,11 @@
+from argparse import Action
 from http import client
 import tkinter as tk
 from tkinter.font import Font
 import os
 import time
 from typing import Tuple
+
 from client import ClientGUI
 import threading, multiprocessing, threading
 from _thread import *
@@ -78,20 +80,14 @@ class ServerGUI(tk.Tk):
     def close_all(self):
         count = 1
         # for (conn, thrd) in self.clients:
-        index = 0
         print('server close_all: num of client=', len(self.clients))
 
         for conn in self.clients:
             print('server closing', count, conn)
             count += 1
             addr = ''
-            try:
-                # addr = conn.gethostname()
-                conn.send(bytes(str(Actions.EXIT.value), 'utf8'))
-                conn.close()
-            except Exception as e:
-                print('server: {} has already been closed, {}'.format(count, e))
-                continue
+            # send an exit to the client, so it will close its conn
+            conn.send(bytes(str(Actions.EXIT.value), 'utf8'))
             print(addr, 'closed')
         
         print('server closing server conn')
