@@ -1,5 +1,6 @@
 from http import client
 import tkinter as tk
+from tkinter.font import Font
 import os
 import time
 from typing import Tuple
@@ -32,17 +33,17 @@ class ServerGUI(tk.Tk):
         self.resizable(False, False)
         self.protocol("WM_DELETE_WINDOW", self.close_all)
 
-        self.generate_game_button = tk.Button(text='Start Play', command=self.create_game)
+        self.generate_game_button = tk.Button(text='Start Play', font=Font(family='Helvetica', size=18, weight='bold'), command=self.create_game)
         self.generate_game_button.grid(row=0, column=0, sticky=tk.W, columnspan=3)
 
         # self.rowsBox = tk.Spinbox(from_=5, to=10, width=2)
         # self.colsBox = tk.Spinbox(from_=5, to=10, width=2)
 
-        self.rowsBox = tk.Spinbox(from_=2, to=10, width=2)
-        self.colsBox = tk.Spinbox(from_=2, to=10, width=2)
+        self.rowsBox = tk.Spinbox(from_=2, to=10, width=2, font=Font(family='Helvetica', size=20, weight='bold'))
+        self.colsBox = tk.Spinbox(from_=2, to=10, width=2, font=Font(family='Helvetica', size=20, weight='bold'))
 
         self.rowsBox.grid(row=1, column=0, sticky=tk.W,)
-        tk.Label(text="X").grid(row=1, column=1)
+        tk.Label(text="X", font=Font(family='Helvetica', size=20, weight='bold')).grid(row=1, column=1)
         self.colsBox.grid(row=1, column=2, sticky=tk.W,)
 
         # threadEl = threading.Thread(target=self.create_server_socket, args=( ))
@@ -160,6 +161,7 @@ class ServerGUI(tk.Tk):
             else:
                 print('server send continue')
                 conn.send(bytes(str(Actions.CONTINUE.value), 'utf8'))
+
 
         # try:
         #     print('closing client conn from server side', conn)
