@@ -1,10 +1,12 @@
 from argparse import Action
 from http import client
+from re import S
 import tkinter as tk
 from tkinter.font import Font
 import os
 import time
 from typing import Tuple
+from typing_extensions import IntVar
 
 from client import ClientGUI
 import threading, multiprocessing, threading
@@ -41,16 +43,24 @@ class ServerGUI(tk.Tk):
         # on exit event, run the close_all functions
         self.protocol("WM_DELETE_WINDOW", self.close_all)
 
-        #   define start button
-        self.generate_game_button = tk.Button(text='Start Play', font=Font(family='Helvetica', size=18, weight='bold'), command=self.create_game)
-        self.generate_game_button.grid(row=0, column=0, sticky=tk.W, columnspan=3)
+        self.main_frame = tk.Frame()
 
         #   define rows and cols spinboxes
-        self.rowsBox = tk.Spinbox(from_=2, to=10, width=2, font=Font(family='Helvetica', size=20, weight='bold'))
-        self.colsBox = tk.Spinbox(from_=2, to=10, width=2, font=Font(family='Helvetica', size=20, weight='bold'))
-        self.rowsBox.grid(row=1, column=0, sticky=tk.W,)
-        self.colsBox.grid(row=1, column=2, sticky=tk.W,)
-        tk.Label(text="X", font=Font(family='Helvetica', size=20, weight='bold')).grid(row=1, column=1)
+        self.spin_frame = tk.Frame(self.main_frame)
+        rows = tk.StringVar(value='8')
+        cols = tk.StringVar(value='8')
+        self.rowsBox = tk.Spinbox(self.spin_frame, textvariable=rows, from_=5, to=10, width=2, font=Font(family='Helvetica', size=20, weight='bold'), state='readonly')
+        self.colsBox = tk.Spinbox(self.spin_frame, textvariable=cols, from_=5, to=10, width=2, font=Font(family='Helvetica', size=20, weight='bold'), state='readonly')
+        self.rowsBox.grid(row=0, column=0, sticky=tk.W,)
+        self.colsBox.grid(row=0, column=2, sticky=tk.W,)
+        tk.Label(self.spin_frame, text="X", font=Font(family='Helvetica', size=20, weight='bold')).grid(row=0, column=1)
+        self.spin_frame.pack()
+
+        #   define start button
+        self.generate_game_button = tk.Button(self.main_frame, text='Start Play', font=Font(family='Helvetica', size=18, weight='bold'), command=self.create_game)
+        self.generate_game_button.pack()
+        
+        self.main_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
         self.create_server_socket()
 
