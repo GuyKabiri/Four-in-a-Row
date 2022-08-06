@@ -26,6 +26,7 @@ class ClientGUI:
         self.cols = size[1]
 
         self.font_style = 'freesansbold.ttf'
+        self.wins = [0, 0]
 
         #   calculate the clients gui size based on the amount of rows and cols
         self.calc_window_size()
@@ -33,21 +34,26 @@ class ClientGUI:
         #   create the socket and the gui
         self.create_socket()
         
-        self.reset_game()
+        self.reset_game_state()
         self.create_gui()
 
         #   run the main game loop
         self.run_game()
 
 
-    def reset_game(self, winner=1):
+    def reset_game_state(self, winner=None):
         '''
         Reset the state of the game
 
             Parameters:
                 winner (int): The ID of the winner, default 1.
         '''
-        self.turn = winner
+        if not winner:
+            self.turn = 1
+        else:
+            self.turn = winner
+            self.wins[self.turn-1] += 1
+
         self.state = Actions.READY
         self.board = np.zeros( (self.rows, self.cols), dtype=np.int8 )               #   define the main board state object
 
@@ -206,6 +212,7 @@ class ClientGUI:
         Clears the top row above the main board with a black rectangle.
         '''
         pygame.draw.rect(self.main_display, utils.get_color('black'), (0, 0, self.width, self.square_size))
+        self.draw_scores()
 
 
     def add_text(self, txt):
@@ -225,6 +232,27 @@ class ClientGUI:
         text_rect.center = (self.width // 2, self.square_size - (self.square_size // 3))
         self.main_display.blit(text, text_rect)
 
+    
+    def draw_scores(self):
+        font = pygame.font.Font(self.font_style, self.font_size)
+        text_y = font.render(str(self.wins[0]), True, utils.get_color('yellow'), utils.get_color('black'))
+        text_r = font.render(str(self.wins[1]), True, utils.get_color('red'), utils.get_color('black'))
+        text_c = font.render(':', True, utils.get_color('gray'), utils.get_color('black'))
+
+        text_rect_y = text_y.get_rect()
+        text_rect_r = text_r.get_rect()
+        text_rect_c = text_c.get_rect()
+
+        offset = 20
+
+        text_rect_y.right = (self.width // 2 - offset)
+        text_rect_r.left = (self.width // 2 + offset)
+        text_rect_c.centerx = (self.width // 2)
+
+        self.main_display.blit(text_y, text_rect_y)
+        self.main_display.blit(text_r, text_rect_r)
+        self.main_display.blit(text_c, text_rect_c)
+
 
     def exit(self, should_send=False):
         '''
@@ -242,7 +270,7 @@ class ClientGUI:
         sys.exit()
 
 
-    def game_over(self, is_win=True):
+    def game_over_gui(self, is_win=True):
         '''
         Add a title to the top of the screen based on the winner, or tie, and draw the reset button.
 
@@ -308,9 +336,11 @@ class ClientGUI:
         '''
         The main function to communicate with the server and maintain the state of the game.
         '''
+
         #   send an ready event to the server to notify the client done its setup
         self.client_socket.send(bytes(str(Actions.READY.value), 'utf8'))
 
+        self.draw_scores()
         action = Actions.UNKNOWN
         while True:
             #   if received an exit event
@@ -332,7 +362,7 @@ class ClientGUI:
                     if self.state == Actions.WIN or self.state == Actions.TIE:
                         if self.reset_button.collidepoint(event.pos[0], event.pos[1]):
                             print('Client({}): reset button pressed'.format(self.id))
-                            self.reset_game(self.turn)
+                            self.reset_game_state(self.turn if self.state == Actions.WIN else None)
                             self.client_socket.send(bytes(str(Actions.RESET.value), 'utf8'))
                             self.draw_board()
 
@@ -368,7 +398,7 @@ class ClientGUI:
                                 print('Client({}): got exit event from server'.format(self.id))
                                 self.exit()             
                             elif Actions.WIN.is_equals(continue_or_win) or Actions.TIE.is_equals(continue_or_win):
-                                self.game_over(is_win=(Actions.WIN.is_equals(continue_or_win)))
+                                self.game_over_gui(is_win=(Actions.WIN.is_equals(continue_or_win)))
                             elif Actions.CONTINUE.is_equals(continue_or_win):
                                 self.turn = 2 if self.turn == 1 else 1
                                 print('Client({}): current turn({})'.format(self.id, self.turn))
