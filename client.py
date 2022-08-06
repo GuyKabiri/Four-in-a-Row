@@ -24,22 +24,32 @@ class ClientGUI:
         #   define the board size
         self.rows = size[0]
         self.cols = size[1]
-        self.board = np.zeros( size, dtype=np.int8 )               #   define the main board state object
-        
-        #   define initial state
-        self.turn = 1
-        self.state = Actions.READY
+
+        self.font_style = 'freesansbold.ttf'
 
         #   calculate the clients gui size based on the amount of rows and cols
         self.calc_window_size()
         
         #   create the socket and the gui
         self.create_socket()
+        
+        self.reset_game()
         self.create_gui()
-        # threadEl = threading.Th
 
         #   run the main game loop
         self.run_game()
+
+
+    def reset_game(self, winner=1):
+        '''
+        Reset the state of the game
+
+            Parameters:
+                winner (int): The ID of the winner, default 1.
+        '''
+        self.turn = winner
+        self.state = Actions.READY
+        self.board = np.zeros( (self.rows, self.cols), dtype=np.int8 )               #   define the main board state object
 
 
     def get_turn_color(self):
@@ -104,6 +114,7 @@ class ClientGUI:
         '''
         #   define the default size
         self.square_size = 80
+        self.font_size = 32
 
         #   get the screen size
         win = tk.Tk()
@@ -123,6 +134,7 @@ class ClientGUI:
             
             #   client's size is bigger than the user's screen, reduce the size
             self.square_size -= 10
+            self.font_size -= 2
 
     
     def create_gui(self):
@@ -175,7 +187,17 @@ class ClientGUI:
                         int( r * self.square_size + self.square_size + self.square_size / 2)
                     ),
                     self.radius)
-
+                
+                #   add a black ring around the coloed circle
+                pygame.draw.circle(
+                    self.main_display,
+                    utils.get_color('black'),
+                    (
+                        int( c * self.square_size + self.square_size / 2),
+                        int( r * self.square_size + self.square_size + self.square_size / 2)
+                    ),
+                    self.radius, 1)
+        pygame.mouse.set_cursor(pygame.cursors.tri_left)
         pygame.display.update()
 
 
@@ -193,10 +215,9 @@ class ClientGUI:
             Parameters:
                 txt (str): Text to add.
         '''
-        font = pygame.font.Font('freesansbold.ttf', 32)
-
         #   if the state of the game is win, define the color of the text as the color of the winner
         color_to_use = self.get_turn_color() if self.state == Actions.WIN else 'GRAY'
+        font = pygame.font.Font(self.font_style, self.font_size)
         text = font.render(txt, True, utils.get_color(color_to_use), utils.get_color('black'))
 
         #   calculate the center of the text to place it in the center of the window
@@ -210,7 +231,7 @@ class ClientGUI:
         Teardown function to close the socket and the gui.
 
             Parameters:
-                should_send (bool): Whether to send an exit event to the server or not.
+                should_send (bool): Whether to send an exit event to the server or not, default False.
         '''
         if should_send:
             print('Client({}): sent exit event to the server'.format(self.id))
@@ -219,6 +240,68 @@ class ClientGUI:
         self.client_socket.close()
         pygame.quit()
         sys.exit()
+
+
+    def game_over(self, is_win=True):
+        '''
+        Add a title to the top of the screen based on the winner, or tie, and draw the reset button.
+
+            Parameters:
+                is_win (bool): Whether it's a win or a tie, default True.
+        '''
+        self.clear_top()
+
+        self.state = Actions.WIN if is_win else Actions.TIE
+
+        if self.state == Actions.WIN:
+            self.add_text('Player {} won!'.format(self.id, self.get_turn_color()))
+        else:
+            self.add_text("It's a tie!")
+            
+        self.draw_reset_button()
+
+    
+    def draw_reset_button(self):
+        '''
+        Draws the reset button on the center of the board.
+        '''
+        #   define the span in each axis
+        x_num_squares = 1.5
+        y_num_squares = 0.75
+
+        #   calculates the X and Y coordinates based on the size of the rectangles of the board
+        x = ((self.cols / 2) - x_num_squares / 2) * self.square_size
+        y = (((self.rows / 2) - y_num_squares / 2) * self.square_size) + self.square_size
+
+        font = pygame.font.Font(self.font_style, self.font_size)
+        text = font.render('Reset' , True , utils.get_color('black'))
+
+        self.reset_button = pygame.draw.rect(
+                    self.main_display,
+                    utils.get_color('gray'),
+                    (
+                        x,
+                        y,
+                        self.square_size*x_num_squares,
+                        self.square_size*y_num_squares
+                    )
+                )
+
+        pygame.draw.rect(
+                self.main_display,
+                utils.get_color('black'),
+                (
+                    x,
+                    y,
+                    self.square_size*x_num_squares,
+                    self.square_size*y_num_squares
+                ), 1
+            )
+
+        #   add the reset text in the center of the button
+        text_rect = text.get_rect()
+        text_rect.center = self.reset_button.center
+        self.main_display.blit(text, text_rect)
 
 
     def run_game(self):
@@ -243,65 +326,75 @@ class ClientGUI:
                     print('Client({}): pygame exit event'.format(self.id))
                     self.exit(should_send=True)
 
-                #   if a mouse click event, and the state of the game is not a win or a tie
-                if event.type == pygame.MOUSEBUTTONUP and self.state == Actions.READY:
-                    print('Client({}): mouse button up event'.format(self.id))
+                #   if a mouse click event
+                if event.type == pygame.MOUSEBUTTONUP:
 
-                    #   get x coordinate of the mouse to calculate the board col
-                    col = self.calc_col_by_mouse(event.pos[0])
+                    if self.state == Actions.WIN or self.state == Actions.TIE:
+                        if self.reset_button.collidepoint(event.pos[0], event.pos[1]):
+                            print('Client({}): reset button pressed'.format(self.id))
+                            self.reset_game(self.turn)
+                            self.client_socket.send(bytes(str(Actions.RESET.value), 'utf8'))
+                            self.draw_board()
 
-                    #   send player id and col to add
-                    self.client_socket.send(bytes(str(self.turn), 'utf8'))
-                    self.client_socket.send(bytes(str(col), 'utf8'))
+                    elif self.state == Actions.READY:
+                        print('Client({}): mouse button up event'.format(self.id))
 
-                    print('Client({}): sent turn({}), col({})'.format(self.id, self.turn, col))
-                    
-                    action = utils.wait_for_data(self.client_socket)
-                    print('Client({}): received action={}'.format(self.id, Actions(int(action))))
+                        #   get x coordinate of the mouse to calculate the board col
+                        col = self.calc_col_by_mouse(event.pos[0])
 
-                    if Actions.EXIT.is_equals(action):
-                        print('Client({}): got exit from server'.format(self.id))
-                        self.exit()
+                        #   send player id and col to add
+                        self.client_socket.send(bytes(str(self.turn), 'utf8'))
+                        self.client_socket.send(bytes(str(col), 'utf8'))
 
-                    #   if action is to add a piece
-                    if Actions.ADD_PIECE.is_equals(action):
-                        utils.add_piece(self.board, col, self.turn)
-                        self.draw_board()
-
-                        #   get an win, tie or continue action
-                        continue_or_win = utils.wait_for_data(self.client_socket)
-                        print('Client({}): received action={}'.format(self.id, Actions(int(continue_or_win))))
+                        print('Client({}): sent turn({}), col({})'.format(self.id, self.turn, col))
+                        
+                        action = utils.wait_for_data(self.client_socket)
+                        print('Client({}): received action={}'.format(self.id, Actions(int(action))))
 
                         if Actions.EXIT.is_equals(action):
-                            print('Client({}): got exit event from server'.format(self.id))
-                            self.exit()             
-                        elif Actions.WIN.is_equals(continue_or_win):
-                            self.clear_top()
-                            self.state = Actions.WIN
-                            self.add_text('{} won!'.format(self.id, self.get_turn_color()))
-                        elif Actions.TIE.is_equals(continue_or_win):
-                            self.clear_top()
-                            self.state = Actions.TIE
-                            self.add_text("It's a tie!")
-                        elif Actions.CONTINUE.is_equals(continue_or_win):
-                            self.turn = 2 if self.turn == 1 else 1
-                            print('Client({}): current turn({})'.format(self.id, self.turn))
+                            print('Client({}): got exit from server'.format(self.id))
+                            self.exit()
+
+                        #   if action is to add a piece
+                        if Actions.ADD_PIECE.is_equals(action):
+                            utils.add_piece(self.board, col, self.turn)
+                            self.draw_board()
+
+                            #   get an win, tie or continue action
+                            continue_or_win = utils.wait_for_data(self.client_socket)
+                            print('Client({}): received action={}'.format(self.id, Actions(int(continue_or_win))))
+
+                            if Actions.EXIT.is_equals(action):
+                                print('Client({}): got exit event from server'.format(self.id))
+                                self.exit()             
+                            elif Actions.WIN.is_equals(continue_or_win) or Actions.TIE.is_equals(continue_or_win):
+                                self.game_over(is_win=(Actions.WIN.is_equals(continue_or_win)))
+                            elif Actions.CONTINUE.is_equals(continue_or_win):
+                                self.turn = 2 if self.turn == 1 else 1
+                                print('Client({}): current turn({})'.format(self.id, self.turn))
 
                 #   if the mouse hovering over the board, draw the top moving circle
-                if (event.type == pygame.MOUSEMOTION or event.type == pygame.MOUSEBUTTONUP) and self.state == Actions.READY:
-                    self.clear_top()
-                    #   get the column index of the mouse
-                    col = self.calc_col_by_mouse(event.pos[0])
-                    #   get the current user color
-                    curr_color = self.get_turn_color()
-                    #   select the user color or an invalid location color based on the board state
-                    color_to_use = utils.get_color(curr_color) if utils.is_valid_location(col, self.board) else utils.get_color('gray')
-                    # calculate the x axis of the circle and draw
-                    circle_x = col * self.square_size + self.square_size / 2
-                    pygame.draw.circle(self.main_display, color_to_use, (circle_x, int(self.square_size/2)), self.radius)
+                if (event.type == pygame.MOUSEMOTION or event.type == pygame.MOUSEBUTTONUP):
+                    if self.state == Actions.READY:
+                        self.clear_top()
+                        #   get the column index of the mouse
+                        col = self.calc_col_by_mouse(event.pos[0])
+                        #   get the current user color
+                        curr_color = self.get_turn_color()
+                        #   select the user color or an invalid location color based on the board state
+                        color_to_use = utils.get_color(curr_color) if utils.is_valid_location(col, self.board) else utils.get_color('gray')
+                        # calculate the x axis of the circle and draw
+                        circle_x = col * self.square_size + self.square_size / 2
+                        pygame.draw.circle(self.main_display, color_to_use, (circle_x, int(self.square_size/2)), self.radius)
+
+                    elif self.state == Actions.WIN or self.state == Actions.TIE:
+                        if self.reset_button.collidepoint(event.pos[0], event.pos[1]):
+                            pygame.mouse.set_cursor(pygame.cursors.broken_x)
+                        else:
+                            pygame.mouse.set_cursor(pygame.cursors.tri_left)
 
                 #   if the mouse is out of the window, clear the top row with black rectangle
-                if event.type == pygame.WINDOWLEAVE:
+                if event.type == pygame.WINDOWLEAVE and self.state == Actions.READY:
                     self.clear_top()
                 
                 # update the main display

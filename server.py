@@ -137,6 +137,11 @@ class ServerGUI(tk.Tk):
             if turn_to_add and Actions.EXIT.is_equals(turn_to_add):
                 print('Server: received exit event from client')
                 break
+
+            elif turn_to_add and Actions.RESET.is_equals(turn_to_add):
+                print('Server: received reset event from client')
+                state = np.zeros( size, dtype=np.int8 )
+                continue
             
             #   receive the step from the client
             col_to_add = utils.wait_for_data(conn)

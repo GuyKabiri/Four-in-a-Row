@@ -1,8 +1,9 @@
 import numpy as np
 import socket
+from typing import *
 
 
-def get_color(color):
+def get_color(color: str) -> List[int]:
     '''
     Get a string color and return the 3-dimensional array that represents it.
 
@@ -17,7 +18,8 @@ def get_color(color):
         'BLUE':     [0, 0, 255],
         'RED':      [255, 0, 0],
         'YELLOW':   [255, 255, 0],
-        'GRAY':     [127, 127, 127], 
+        'GRAY':     [127, 127, 127],
+        'WHITE':    [255, 255, 255],
     }
     color = color.upper()
     if color not in colors_dict:
@@ -26,7 +28,7 @@ def get_color(color):
     return colors_dict[color]
 
 
-def is_won(board, target, n=4):
+def is_won(board: np.ndarray, target: int, n: Optional[int] = 4) -> bool:
     '''
     Check if the target user has n-in-a-row.
 
@@ -42,7 +44,7 @@ def is_won(board, target, n=4):
     if board.ndim != 2:
         return False
 
-    def check_row(row):
+    def check_row(row: int) -> bool:
         '''
         Check if a row has n-in-a-row
 
@@ -66,7 +68,7 @@ def is_won(board, target, n=4):
                 return True
         return False
 
-    def check_rows(board):
+    def check_rows(board: np.ndarray) -> bool:
         '''
         Check all rows in the board.
 
@@ -81,7 +83,7 @@ def is_won(board, target, n=4):
                 return True
         return False
     
-    def check_cols(board):
+    def check_cols(board: np.ndarray) -> bool:
         '''
         Check all columns in the board.
 
@@ -94,7 +96,7 @@ def is_won(board, target, n=4):
         #   transpose the matrix so the columns become rows
         return check_rows(board.T)
 
-    def check_diags(board):
+    def check_diags(board: np.ndarray) -> bool:
         '''
         Check all diagonals in the board.
 
@@ -123,7 +125,7 @@ def is_won(board, target, n=4):
     return check_rows(board) or check_cols(board) or check_diags(board)
 
 
-def is_board_full(board):
+def is_board_full(board: np.ndarray) -> bool:
     '''
     Checks if the board is full, meaning there is no more space to add pieces.
 
@@ -136,7 +138,7 @@ def is_board_full(board):
     return not np.any(board == 0)
 
 
-def add_piece(board, col, turn):
+def add_piece(board: np.ndarray, col: int, turn: int) -> np.ndarray:
     '''
     Adds a piece in a given column if not column is not full and return the new board.
 
@@ -164,7 +166,7 @@ def add_piece(board, col, turn):
     return board
 
 
-def is_valid_location(loc, board):
+def is_valid_location(loc: int, board: np.ndarray) -> bool:
     '''
     Checks if a given column is valid and has space to add a piece.
 
@@ -183,7 +185,7 @@ def is_valid_location(loc, board):
     return False
 
 
-def wait_for_data(conn, timeout=None):
+def wait_for_data(conn: socket, timeout: Optional[float] = None) -> bytes:
     '''
     Wait to receive data on a given socket.
 
@@ -197,7 +199,7 @@ def wait_for_data(conn, timeout=None):
     try:
         conn.settimeout(timeout)
         data = conn.recv(1024)
-        print('wait_for_data: received=', data.decode('utf-8'), 'from', conn)
+        # print('wait_for_data: received=', data.decode('utf-8'), 'from', conn)
         if not data:
             return None
     except socket.error as e:
@@ -207,7 +209,7 @@ def wait_for_data(conn, timeout=None):
 
 if __name__ == '__main__':
 
-    def test():
+    def test() -> None:
         board = np.zeros( (6, 10) )
 
         # assert rows
