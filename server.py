@@ -1,20 +1,12 @@
-from argparse import Action
-from http import client
-from re import S
 import tkinter as tk
 from tkinter.font import Font
-import os
-import time
-from typing import Tuple
-from typing_extensions import IntVar
-
-from client import ClientGUI
 import threading, multiprocessing, threading
 from _thread import *
 import socket
 import numpy as np
+from typing import *
+from client import ClientGUI
 from actions import Actions
-
 import utils
 
 # end of imports
@@ -65,7 +57,7 @@ class ServerGUI(tk.Tk):
         self.create_server_socket()
 
     
-    def create_game(self):
+    def create_game(self) -> None:
         '''
         Callback function for the start game button.
         Reads the number of rows and columns, create a new client gui and open a socket.
@@ -89,7 +81,7 @@ class ServerGUI(tk.Tk):
         print('Server: connected to={}:{}'.format(address[0], str(address[1])))
 
     
-    def close_all(self):
+    def close_all(self) -> None:
         '''
         Callback function for server exit event.
         Sends an exit event to all clients to close their sockets,
@@ -107,7 +99,7 @@ class ServerGUI(tk.Tk):
         self.destroy()
 
 
-    def create_server_socket(self):
+    def create_server_socket(self) -> None:
         '''
         Creates the server socket.
         '''
@@ -123,7 +115,7 @@ class ServerGUI(tk.Tk):
             print('Server: ERROR=', e)
 
 
-    def run_client(self, conn, size):
+    def run_client(self, conn: socket, size: Union[Tuple, List]) -> None:
         '''
         Maintains the client's state, receive steps and send responses.
         '''

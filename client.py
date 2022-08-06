@@ -5,13 +5,13 @@ import sys
 import math
 import utils
 import socket
-import threading
 from actions import Actions
+from typing import *
 
 
 class ClientGUI:
 
-    def __init__(self, id, size=(6, 10)):
+    def __init__(self, id: int, size: Union[Tuple, List] = (6, 10)) -> None:
         '''
         Create a new client, define it's gui, board, and create a socket.
         '''
@@ -41,7 +41,7 @@ class ClientGUI:
         self.run_game()
 
 
-    def reset_game_state(self, winner=None):
+    def reset_game_state(self, winner: Optional[int] = None) -> None:
         '''
         Reset the state of the game
 
@@ -58,7 +58,7 @@ class ClientGUI:
         self.board = np.zeros( (self.rows, self.cols), dtype=np.int8 )               #   define the main board state object
 
 
-    def get_turn_color(self):
+    def get_turn_color(self) -> None:
         '''
         Returns the color to use based on the current player.
 
@@ -68,7 +68,7 @@ class ClientGUI:
         return 'YELLOW' if self.turn == 1 else 'RED'
 
     
-    def get_player_color(self, row, col):
+    def get_player_color(self, row: int, col: int) -> str:
         '''
         Get a cell in the board and return it's color.
 
@@ -86,7 +86,7 @@ class ClientGUI:
         return 'BLACK'
 
     
-    def calc_col_by_mouse(self, x_cord):
+    def calc_col_by_mouse(self, x_cord: int) -> int:
         '''
         Calculate the column index based on the position of the mouse on the board.
 
@@ -99,7 +99,7 @@ class ClientGUI:
         return int(math.floor(x_cord / self.square_size))
 
 
-    def create_socket(self):
+    def create_socket(self) -> None:
         '''
         Creates the client's socket.
         '''
@@ -114,7 +114,7 @@ class ClientGUI:
             self.client_socket.close()
 
 
-    def calc_window_size(self):
+    def calc_window_size(self) -> None:
         '''
         Calculate the size of the window, and adjust the circles size based on the users screen size.
         '''
@@ -143,7 +143,7 @@ class ClientGUI:
             self.font_size -= 2
 
     
-    def create_gui(self):
+    def create_gui(self) -> None:
         '''
         Creates the client's gui.
         '''
@@ -163,7 +163,7 @@ class ClientGUI:
         self.draw_board()
 
 
-    def draw_board(self):
+    def draw_board(self) -> None:
         '''
         Draws the board with its current state.
         '''
@@ -207,7 +207,7 @@ class ClientGUI:
         pygame.display.update()
 
 
-    def clear_top(self):
+    def clear_top(self) -> None:
         '''
         Clears the top row above the main board with a black rectangle.
         '''
@@ -215,7 +215,7 @@ class ClientGUI:
         self.draw_scores()
 
 
-    def add_text(self, txt):
+    def add_text(self, txt: str) -> None:
         '''
         Adds text in the top black rectangle.
 
@@ -233,7 +233,10 @@ class ClientGUI:
         self.main_display.blit(text, text_rect)
 
     
-    def draw_scores(self):
+    def draw_scores(self) -> None:
+        '''
+        Draw the players scores at the top of the screen.
+        '''
         font = pygame.font.Font(self.font_style, self.font_size)
         text_y = font.render(str(self.wins[0]), True, utils.get_color('yellow'), utils.get_color('black'))
         text_r = font.render(str(self.wins[1]), True, utils.get_color('red'), utils.get_color('black'))
@@ -245,16 +248,16 @@ class ClientGUI:
 
         offset = 20
 
-        text_rect_y.right = (self.width // 2 - offset)
-        text_rect_r.left = (self.width // 2 + offset)
-        text_rect_c.centerx = (self.width // 2)
+        text_rect_y.right =     (self.width // 2 - offset)
+        text_rect_r.left =      (self.width // 2 + offset)
+        text_rect_c.centerx =   (self.width // 2)
 
         self.main_display.blit(text_y, text_rect_y)
         self.main_display.blit(text_r, text_rect_r)
         self.main_display.blit(text_c, text_rect_c)
 
 
-    def exit(self, should_send=False):
+    def exit(self, should_send: bool = False) -> None:
         '''
         Teardown function to close the socket and the gui.
 
@@ -270,7 +273,7 @@ class ClientGUI:
         sys.exit()
 
 
-    def game_over_gui(self, is_win=True):
+    def game_over_gui(self, is_win: bool = True) -> None:
         '''
         Add a title to the top of the screen based on the winner, or tie, and draw the reset button.
 
@@ -289,7 +292,7 @@ class ClientGUI:
         self.draw_reset_button()
 
     
-    def draw_reset_button(self):
+    def draw_reset_button(self) -> None:
         '''
         Draws the reset button on the center of the board.
         '''
@@ -332,7 +335,7 @@ class ClientGUI:
         self.main_display.blit(text, text_rect)
 
 
-    def run_game(self):
+    def run_game(self) -> None:
         '''
         The main function to communicate with the server and maintain the state of the game.
         '''
