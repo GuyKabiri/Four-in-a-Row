@@ -56,9 +56,6 @@ class ClientGUI:
         '''
         if not winner:
             self.turn = 1
-        else:
-            self.turn = winner
-            self.wins[self.turn-1] += 1
 
         self.state = Actions.READY
         self.board = np.zeros( (self.rows, self.cols), dtype=np.int8 )               #   define the main board state object
@@ -294,6 +291,9 @@ class ClientGUI:
             Parameters:
                 is_win (bool): Whether it's a win or a tie, default True.
         '''
+        if is_win:
+            self.wins[self.turn-1] += 1
+
         self.clear_top()
 
         self.state = Actions.WIN if is_win else Actions.TIE
