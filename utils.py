@@ -224,12 +224,9 @@ def logger_listener(queue: multiprocessing.Queue, log_level: int):
 
     root = logging.getLogger()
     file_handler = logging.handlers.RotatingFileHandler(log_file_name, 'a')
-    console_handler = logging.StreamHandler()
     formatter = logging.Formatter('%(asctime)s %(name)-10s %(levelname)-8s; %(message)s;')
     file_handler.setFormatter(formatter)
-    console_handler.setFormatter(formatter)
     root.addHandler(file_handler)
-    root.addHandler(console_handler)
     root.setLevel(log_level)
 
     #   run listener forever
