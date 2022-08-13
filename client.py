@@ -28,7 +28,7 @@ class ClientGUI:
         self.cols = size[1]
 
         self.queue = queue
-        utils.worker_configurer(self.queue, log_level)
+        utils.root_logger_configurer(self.queue, log_level)
         self.logger = logging.getLogger('Client({})'.format(self.id))
 
         self.font_style = 'freesansbold.ttf'
@@ -278,8 +278,9 @@ class ClientGUI:
         if should_send:
             self.client_socket.send(bytes(str(Actions.EXIT.value), 'utf8'))
             self.logger.debug('send exit event to server')
+        host, port = self.client_socket.getsockname()
         self.client_socket.close()
-        self.logger.info('conn closed')
+        self.logger.info('conn closed {}:{}'.format(host, port))
         pygame.quit()
         sys.exit()
 
