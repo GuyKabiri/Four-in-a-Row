@@ -45,10 +45,10 @@ class ServerGUI(tk.Tk):
         # logging.info('n={}, log_level={}'.format(self.n, logging.getLevelName(self.log_level)))
 
         self.queue = multiprocessing.Queue(-1)  #   -1=unlimited
-        listener = multiprocessing.Process(target=utils.logger_listener, args=(self.queue, self.log_level, ))
-        listener.start()
+        self.logger_listener = multiprocessing.Process(target=utils.logger_listener, args=(self.queue, self.log_level, ))
+        self.logger_listener.start()
 
-        utils.worker_configurer(self.queue, self.log_level)
+        utils.root_logger_configurer(self.queue, self.log_level)
         self.logger = logging.getLogger('Server')
         self.logger.info('n={}, log_level={}'.format(self.n, logging.getLevelName(self.log_level)))
 
@@ -125,6 +125,10 @@ class ServerGUI(tk.Tk):
         
         self.logger.info('Server: closing server conn')
         self.server_socket.close()
+        
+        # for child in multiprocessing.active_children():
+        self.logger_listener.terminate()
+
         self.destroy()
 
 
