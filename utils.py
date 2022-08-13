@@ -1,3 +1,8 @@
+import time
+import logging
+import logging.handlers
+import datetime
+import multiprocessing
 import numpy as np
 import socket
 from typing import *
@@ -204,6 +209,38 @@ def wait_for_data(conn: socket, timeout: Optional[float] = None) -> bytes:
     except socket.error as e:
         return None
     return data
+
+
+def logger_listener(queue: multiprocessing.Queue, log_level: int):
+    def logger_listener_config():
+        date_time_str = datetime.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
+        log_file_name = 'logs/{}.log'.format(date_time_str)
+
+        root = logging.getLogger()
+        file_handler = logging.handlers.RotatingFileHandler(log_file_name, 'a')
+        console_handler = logging.StreamHandler()
+        formatter = logging.Formatter('%(asctime)s %(name)-10s %(levelname)-8s; %(message)s;')
+        # %(asctime)s %(levelname)-8s; %(message)s;
+        file_handler.setFormatter(formatter)
+        console_handler.setFormatter(formatter)
+        root.addHandler(file_handler)
+        root.addHandler(console_handler)
+        root.setLevel(log_level)
+
+    logger_listener_config()
+    while True:
+        while not queue.empty():
+            record = queue.get()
+            logger = logging.getLogger(record.name)
+            logger.handle(record)
+        time.sleep(1)
+
+
+def worker_configurer(queue: multiprocessing.Queue, log_level: int):
+    h = logging.handlers.QueueHandler(queue)
+    root = logging.getLogger()
+    root.addHandler(h)
+    root.setLevel(log_level)
 
 
 if __name__ == '__main__':

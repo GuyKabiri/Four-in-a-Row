@@ -1,5 +1,7 @@
 import pygame
 import tkinter as tk
+import multiprocessing
+import logging
 import numpy as np
 import sys
 import math
@@ -11,7 +13,7 @@ from typing import *
 
 class ClientGUI:
 
-    def __init__(self, id: int, size: Union[Tuple, List] = (6, 10)) -> None:
+    def __init__(self, id: int, queue: multiprocessing.Queue, log_level: int, size: Union[Tuple, List] = (6, 10)) -> None:
         '''
         Create a new client, define it's gui, board, and create a socket.
         '''
@@ -24,6 +26,10 @@ class ClientGUI:
         #   define the board size
         self.rows = size[0]
         self.cols = size[1]
+
+        self.queue = queue
+        utils.worker_configurer(self.queue, log_level)
+        self.logger = logging.getLogger('Client({})'.format(self.id))
 
         self.font_style = 'freesansbold.ttf'
         self.wins = [0, 0]
@@ -110,7 +116,9 @@ class ClientGUI:
         try:
             self.client_socket.connect( (self.host, self.port) )
         except socket.error as e:
+            self.logger.error(str(e))
             self.client_socket.close()
+        self.logger.info('created conn {}:{}'.format(self.host, self.port))
 
 
     def calc_window_size(self) -> None:
@@ -140,6 +148,8 @@ class ClientGUI:
             #   client's size is bigger than the user's screen, reduce the size
             self.square_size -= 10
             self.font_size -= 2
+        
+        self.logger.debug('window size (width={}, height={}), radius={}, square_size={}, font_size={}'.format(self.width, self.height, self.radius, self.square_size, self.font_size))
 
     
     def create_gui(self) -> None:
@@ -202,6 +212,8 @@ class ClientGUI:
                         int( r * self.square_size + self.square_size + self.square_size / 2)
                     ),
                     self.radius, 1)
+
+                self.logger.debug('draw circle (row, col)=({}, {}), color={}'.format(r, c, color_to_use))
         pygame.mouse.set_cursor(pygame.cursors.tri_left)
         pygame.display.update()
 
@@ -230,16 +242,19 @@ class ClientGUI:
         text_rect = text.get_rect()
         text_rect.center = (self.width // 2, self.square_size - (self.square_size // 3))
         self.main_display.blit(text, text_rect)
+        self.logger.debug('draw text={}, color={}'.format(txt, color_to_use))
 
     
     def draw_scores(self) -> None:
         '''
         Draw the players scores at the top of the screen.
         '''
+        yellow_score, red_score = str(self.wins[0]), str(self.wins[1])
+
         font = pygame.font.Font(self.font_style, self.font_size)
-        text_y = font.render(str(self.wins[0]), True, utils.get_color('yellow'), utils.get_color('black'))
-        text_r = font.render(str(self.wins[1]), True, utils.get_color('red'), utils.get_color('black'))
-        text_c = font.render(':', True, utils.get_color('gray'), utils.get_color('black'))
+        text_y = font.render(yellow_score,  True, utils.get_color('yellow'),    utils.get_color('black'))
+        text_r = font.render(red_score,     True, utils.get_color('red'),       utils.get_color('black'))
+        text_c = font.render(':',           True, utils.get_color('gray'),      utils.get_color('black'))
 
         text_rect_y = text_y.get_rect()
         text_rect_r = text_r.get_rect()
@@ -265,7 +280,9 @@ class ClientGUI:
         '''
         if should_send:
             self.client_socket.send(bytes(str(Actions.EXIT.value), 'utf8'))
+            self.logger.debug('send exit event to server')
         self.client_socket.close()
+        self.logger.info('conn closed')
         pygame.quit()
         sys.exit()
 
@@ -287,6 +304,11 @@ class ClientGUI:
             self.add_text("It's a tie!")
             
         self.draw_reset_button()
+
+        yellow_score, red_score = self.wins[0], self.wins[1]
+        num_format = '{:' + str(max(len(str(yellow_score)), len(str(red_score)))) + 'd}'
+        score_format = num_format.format(yellow_score) + ':' + num_format.format(red_score)
+        self.logger.debug('game over, state={}, scores(yellow:red)=({})'.format(self.state.value, score_format))
 
     
     def draw_reset_button(self) -> None:
@@ -339,6 +361,7 @@ class ClientGUI:
 
         #   send an ready event to the server to notify the client done its setup
         self.client_socket.send(bytes(str(Actions.READY.value), 'utf8'))
+        self.logger.debug('sent ready event')
 
         self.draw_scores()
         action = Actions.UNKNOWN
@@ -346,12 +369,14 @@ class ClientGUI:
             #   if received an exit event
             is_exit =  utils.wait_for_data(self.client_socket, 0.01)
             if is_exit and Actions.EXIT.is_equals(is_exit):
+                self.logger.debug('received exit event from server')
                 self.exit()
 
             #   iterate over the pygame events
             for event in pygame.event.get():
                 #   if exit event
                 if event.type == pygame.QUIT:
+                    self.logger.debug('pygame exit event')
                     self.exit(should_send=True)
 
                 #   if a mouse click event
@@ -359,21 +384,27 @@ class ClientGUI:
 
                     if self.state == Actions.WIN or self.state == Actions.TIE:
                         if self.reset_button.collidepoint(event.pos[0], event.pos[1]):
+                            self.logger.debug('reset button pressed')
                             self.reset_game_state(self.turn if self.state == Actions.WIN else None)
                             self.client_socket.send(bytes(str(Actions.RESET.value), 'utf8'))
                             self.draw_board()
 
                     elif self.state == Actions.READY:
+                        self.logger.debug('mouse button up event')
+
                         #   get x coordinate of the mouse to calculate the board col
                         col = self.calc_col_by_mouse(event.pos[0])
 
                         #   send player id and col to add
                         self.client_socket.send(bytes(str(self.turn), 'utf8'))
                         self.client_socket.send(bytes(str(col), 'utf8'))
-                        
+                        self.logger.debug('sent turn={}, col={}'.format(self.turn, col))
+
                         action = utils.wait_for_data(self.client_socket)
+                        self.logger.debug('received action={}'.format(self.id, Actions(int(action))))
 
                         if Actions.EXIT.is_equals(action):
+                            self.logger.debug('got exit event from server')
                             self.exit()
 
                         #   if action is to add a piece
@@ -383,13 +414,16 @@ class ClientGUI:
 
                             #   get an win, tie or continue action
                             continue_or_win = utils.wait_for_data(self.client_socket)
+                            self.logger.debug('received action={}'.format(Actions(int(continue_or_win))))
 
                             if Actions.EXIT.is_equals(action):
+                                self.logger.debug('got exit event from server')
                                 self.exit()             
                             elif Actions.WIN.is_equals(continue_or_win) or Actions.TIE.is_equals(continue_or_win):
                                 self.game_over_gui(is_win=(Actions.WIN.is_equals(continue_or_win)))
                             elif Actions.CONTINUE.is_equals(continue_or_win):
                                 self.turn = 2 if self.turn == 1 else 1
+                                self.logger.debug('current turn({})'.format(self.turn))
 
                 #   if the mouse hovering over the board, draw the top moving circle
                 if (event.type == pygame.MOUSEMOTION or event.type == pygame.MOUSEBUTTONUP):
