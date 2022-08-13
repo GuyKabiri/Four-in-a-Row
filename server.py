@@ -40,7 +40,7 @@ class ServerGUI(tk.Tk):
         date_time_str = datetime.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
         log_file_name = 'logs/{}.log'.format(date_time_str)
         print('Logging into', log_file_name)
-        logging.basicConfig(filename=log_file_name, level=self.log_level, format='%(asctime)s %(levelname)-8s; %(message)s')
+        logging.basicConfig(filename=log_file_name, level=self.log_level, format='%(asctime)s %(levelname)-8s; %(message)s;')
         logging.info('n={}, log_level={}'.format(self.n, logging.getLevelName(self.log_level)))
 
         self.clients = []
