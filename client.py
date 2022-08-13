@@ -110,7 +110,6 @@ class ClientGUI:
         try:
             self.client_socket.connect( (self.host, self.port) )
         except socket.error as e:
-            print('Client({}): ERROR={}'.format(self.id, e))
             self.client_socket.close()
 
 
@@ -265,9 +264,7 @@ class ClientGUI:
                 should_send (bool): Whether to send an exit event to the server or not, default False.
         '''
         if should_send:
-            print('Client({}): sent exit event to the server'.format(self.id))
             self.client_socket.send(bytes(str(Actions.EXIT.value), 'utf8'))
-        print('Client({}): closed conn'.format(self.id))
         self.client_socket.close()
         pygame.quit()
         sys.exit()
@@ -349,14 +346,12 @@ class ClientGUI:
             #   if received an exit event
             is_exit =  utils.wait_for_data(self.client_socket, 0.01)
             if is_exit and Actions.EXIT.is_equals(is_exit):
-                print('Client({}): received exit event from server'.format(self.id))
                 self.exit()
 
             #   iterate over the pygame events
             for event in pygame.event.get():
                 #   if exit event
                 if event.type == pygame.QUIT:
-                    print('Client({}): pygame exit event'.format(self.id))
                     self.exit(should_send=True)
 
                 #   if a mouse click event
@@ -364,28 +359,21 @@ class ClientGUI:
 
                     if self.state == Actions.WIN or self.state == Actions.TIE:
                         if self.reset_button.collidepoint(event.pos[0], event.pos[1]):
-                            print('Client({}): reset button pressed'.format(self.id))
                             self.reset_game_state(self.turn if self.state == Actions.WIN else None)
                             self.client_socket.send(bytes(str(Actions.RESET.value), 'utf8'))
                             self.draw_board()
 
                     elif self.state == Actions.READY:
-                        print('Client({}): mouse button up event'.format(self.id))
-
                         #   get x coordinate of the mouse to calculate the board col
                         col = self.calc_col_by_mouse(event.pos[0])
 
                         #   send player id and col to add
                         self.client_socket.send(bytes(str(self.turn), 'utf8'))
                         self.client_socket.send(bytes(str(col), 'utf8'))
-
-                        print('Client({}): sent turn({}), col({})'.format(self.id, self.turn, col))
                         
                         action = utils.wait_for_data(self.client_socket)
-                        print('Client({}): received action={}'.format(self.id, Actions(int(action))))
 
                         if Actions.EXIT.is_equals(action):
-                            print('Client({}): got exit from server'.format(self.id))
                             self.exit()
 
                         #   if action is to add a piece
@@ -395,16 +383,13 @@ class ClientGUI:
 
                             #   get an win, tie or continue action
                             continue_or_win = utils.wait_for_data(self.client_socket)
-                            print('Client({}): received action={}'.format(self.id, Actions(int(continue_or_win))))
 
                             if Actions.EXIT.is_equals(action):
-                                print('Client({}): got exit event from server'.format(self.id))
                                 self.exit()             
                             elif Actions.WIN.is_equals(continue_or_win) or Actions.TIE.is_equals(continue_or_win):
                                 self.game_over_gui(is_win=(Actions.WIN.is_equals(continue_or_win)))
                             elif Actions.CONTINUE.is_equals(continue_or_win):
                                 self.turn = 2 if self.turn == 1 else 1
-                                print('Client({}): current turn({})'.format(self.id, self.turn))
 
                 #   if the mouse hovering over the board, draw the top moving circle
                 if (event.type == pygame.MOUSEMOTION or event.type == pygame.MOUSEBUTTONUP):

@@ -1,3 +1,4 @@
+import os
 import tkinter as tk
 from tkinter.font import Font
 import threading, multiprocessing, threading
@@ -8,6 +9,9 @@ from typing import *
 from client import ClientGUI
 from actions import Actions
 import utils
+import logging
+import datetime
+import argparse
 
 # end of imports
 
@@ -21,6 +25,23 @@ class ServerGUI(tk.Tk):
         Create a new server, define it's gui and create a server socket.
         '''
         super().__init__()
+
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--log_level', default='info', type=str, choices=['info', 'debug', 'warning', 'error', 'critical'])
+        parser.add_argument('--n', default=4, type=int, choices=[4, 5, 6])
+        args = vars(parser.parse_args())
+        
+        self.n = int(args['n'])
+        self.log_level = getattr(logging, args['log_level'].upper())
+
+        if not os.path.exists('logs'):
+            os.mkdir('logs')
+
+        date_time_str = datetime.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
+        log_file_name = 'logs/{}.log'.format(date_time_str)
+        print('Logging into', log_file_name)
+        logging.basicConfig(filename=log_file_name, level=self.log_level, format='%(asctime)s %(levelname)-8s; %(message)s')
+        logging.info('n={}, log_level={}'.format(self.n, logging.getLevelName(self.log_level)))
 
         self.clients = []
         self.client_id = 0
@@ -68,17 +89,16 @@ class ServerGUI(tk.Tk):
         #   creates new process to start the client's gui on
         client_process = multiprocessing.Process(target=ClientGUI, args=(self.client_id, (rows, cols)))
         client_process.start()
-        print('Server: created Client({})'.format(self.client_id))
+        logging.info('created Client({}) with board size (rows={}, cols={})'.format(self.client_id, rows, cols))
 
         client, address = self.server_socket.accept()
 
         #   creates new thread to maintain the client's state
-        thread = threading.Thread(target=self.run_client, daemon=True, args=(client, (rows, cols), ))
+        thread = threading.Thread(target=self.run_client, daemon=True, args=(client, self.client_id, (rows, cols), ))
         thread.start()
 
-        # self.clients.append(( client, thread ))
         self.clients.append(client)
-        print('Server: connected to={}:{}'.format(address[0], str(address[1])))
+        logging.info('connected to={}:{}'.format(address[0], str(address[1])))
 
     
     def close_all(self) -> None:
@@ -88,13 +108,13 @@ class ServerGUI(tk.Tk):
         close the server's socket and teardown the gui.
         '''
         for conn in self.clients:
-            print('Server: closing', conn)
-            addr = ''
+            host, port = conn.getpeername()
+            logging.debug('closing {}:{}'.format(host, port))
             # send an exit to the client, so it will close its conn
             conn.send(bytes(str(Actions.EXIT.value), 'utf8'))
-            print('Server: {} closed'.format(addr))
+            logging.debug('conn {}:{} closed'.format(host, port))
         
-        print('Server: closing server conn')
+        logging.info('Server: closing server conn')
         self.server_socket.close()
         self.destroy()
 
@@ -112,12 +132,19 @@ class ServerGUI(tk.Tk):
             self.server_socket.listen()
         except socket.error as e:
             self.server_socket.close()
-            print('Server: ERROR=', e)
+            logging.error(e)
+        host, port = self.server_socket.getsockname()
+        logging.info('socket created {}:{}'.format(host, port))
 
 
-    def run_client(self, conn: socket, size: Union[Tuple, List]) -> None:
+    def run_client(self, conn: socket, id: int, size: Union[Tuple, List]) -> None:
         '''
         Maintains the client's state, receive steps and send responses.
+
+            Parameters:
+                conn (socket):      The socket to communicate with the client.
+                id (int):           The ID of the client.
+                size (tuple):       The size of the board.     
         '''
 
         #   initiate the board
@@ -127,7 +154,8 @@ class ServerGUI(tk.Tk):
         while True:
             wait_to_ready = utils.wait_for_data(conn, 0.1)
             if wait_to_ready and Actions.READY.is_equals(wait_to_ready):
-                print('Server: client is ready {}'.format(conn))
+                host, port = conn.getpeername()
+                logging.debug('Client({}) is ready {}:{}'.format(id, host, port))
                 break
 
         #   run the main clients loop
@@ -137,11 +165,11 @@ class ServerGUI(tk.Tk):
 
             #   if client sent an exit event, break the main loop
             if turn_to_add and Actions.EXIT.is_equals(turn_to_add):
-                print('Server: received exit event from client')
+                logging.debug('received exit event from Client({})'.format(id))
                 break
 
             elif turn_to_add and Actions.RESET.is_equals(turn_to_add):
-                print('Server: received reset event from client')
+                logging.debug('received reset event from Client({})'.format(id))
                 state = np.zeros( size, dtype=np.int8 )
                 continue
             
@@ -152,33 +180,33 @@ class ServerGUI(tk.Tk):
             if not turn_to_add or not col_to_add:
                 break
             
-            print('Server: got turn({}), col({})'.format(turn_to_add, col_to_add))
             turn_to_add, col_to_add = int(turn_to_add), int(col_to_add)
+            logging.debug('got turn({}), col({}) from Client({})'.format(turn_to_add, col_to_add, id))
 
             #   validate the step, if illegal, send event to notify the client
             if not utils.is_valid_location(col_to_add, state):
-                print('Server: send illegal_location')
+                logging.error('send illegal_location to Client({})'.format(id))
                 conn.send(bytes(str(Actions.ILLEGAL_LOCATION.value), 'utf8'))
                 continue
 
-            print('Server: legal location')
+            logging.debug('legal location')
             
             #   add the piece in the requested place and send event to update the client
             state = utils.add_piece(state, col_to_add, turn_to_add)
             conn.send(bytes(str(Actions.ADD_PIECE.value), 'utf8'))
-            print('Server: piece added')
+            logging.debug('piece added')
 
             #   if the user that added the piece won, send win event
-            if utils.is_won(state, turn_to_add):
-                print('Server: send win')
+            if utils.is_won(state, turn_to_add, self.n):
+                logging.debug('send win to Client({})'.format(id))
                 conn.send(bytes(str(Actions.WIN.value), 'utf8'))
             #   if the board is full, send tie event
             elif utils.is_board_full(state):
-                print('Server: send tie')
+                logging.debug('send tie to Client({})'.format(id))
                 conn.send(bytes(str(Actions.TIE.value), 'utf8'))
             #   if not win and board is not full, send continue event to continue the game
             else:
-                print('Server: send continue')
+                logging.debug('send continue to Client({})'.format(id))
                 conn.send(bytes(str(Actions.CONTINUE.value), 'utf8'))
 
 

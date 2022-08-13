@@ -199,7 +199,6 @@ def wait_for_data(conn: socket, timeout: Optional[float] = None) -> bytes:
     try:
         conn.settimeout(timeout)
         data = conn.recv(1024)
-        # print('wait_for_data: received=', data.decode('utf-8'), 'from', conn)
         if not data:
             return None
     except socket.error as e:
