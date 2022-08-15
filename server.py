@@ -38,17 +38,10 @@ class ServerGUI(tk.Tk):
 
         parser = argparse.ArgumentParser()
         parser.add_argument('--log_level', default='info', type=str, choices=['info', 'debug', 'warning', 'error', 'critical'])
-        parser.add_argument('--n', default=4, type=int, choices=[4, 5, 6])
         args = vars(parser.parse_args())
         
-        self.n = int(args['n'])
         self.log_level = getattr(logging, args['log_level'].upper())
-
-        # date_time_str = datetime.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
-        # log_file_name = 'logs/{}.log'.format(date_time_str)
-        # print('Logging into', log_file_name)
-        # logging.basicConfig(filename=log_file_name, level=self.log_level, format='%(asctime)s %(levelname)-8s; %(message)s;')
-        # logging.info('n={}, log_level={}'.format(self.n, logging.getLevelName(self.log_level)))
+        self.n = 4
 
         self.queue = multiprocessing.Queue(-1)  #   -1=unlimited
         self.logger_listener = multiprocessing.Process(target=utils.logger_listener, args=(self.queue, self.log_level, ))
@@ -72,6 +65,15 @@ class ServerGUI(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self.close_all)
 
         self.main_frame = tk.Frame()
+
+        #   define n-in-a-row frame
+        self.n_frame = tk.Frame(self.main_frame)
+        tk.Label(self.n_frame, text="n=", font=Font(family='Helvetica', size=20, weight='bold')).grid(row=0, column=0)
+        n = tk.StringVar(value='4')
+        self.n_value = tk.Spinbox(self.n_frame, textvariable=n, from_=4, to=6, width=2, font=Font(family='Helvetica', size=20, weight='bold'), state='readonly')
+        self.n_value.grid(row=0, column=1)
+        self.n_frame.pack()
+
 
         #   define rows and cols spinboxes
         self.spin_frame = tk.Frame(self.main_frame)
@@ -99,6 +101,7 @@ class ServerGUI(tk.Tk):
         Reads the number of rows and columns, create a new client gui and open a socket.
         '''
         rows, cols = int(self.rowsBox.get()), int(self.colsBox.get())
+        n = int(self.n_value.get())
 
         self.client_id += 1
         #   creates new process to start the client's gui on
@@ -109,7 +112,7 @@ class ServerGUI(tk.Tk):
         client, address = self.server_socket.accept()
 
         #   creates new thread to maintain the client's state
-        thread = threading.Thread(target=self.run_client, daemon=True, args=(client, self.client_id, (rows, cols), ))
+        thread = threading.Thread(target=self.run_client, daemon=True, args=(client, self.client_id, (rows, cols), n, ))
         thread.start()
 
         self.clients.append(client)
@@ -157,14 +160,15 @@ class ServerGUI(tk.Tk):
         self.logger.info('socket created {}:{}'.format(host, port))
 
 
-    def run_client(self, conn: socket, client_id: int, size: Union[Tuple, List]) -> None:
+    def run_client(self, conn: socket, client_id: int, size: Union[Tuple, List], n: int) -> None:
         '''
         Maintains the client's state, receive steps and send responses.
 
             Parameters:
                 conn (socket):      The socket to communicate with the client.
                 client_id (int):    The ID of the client.
-                size (tuple):       The size of the board.     
+                size (tuple):       The size of the board.
+                n (int):            Value for n-in-a-row.    
         '''
 
         #   initiate the board
@@ -217,7 +221,7 @@ class ServerGUI(tk.Tk):
             self.logger.debug('piece added')
 
             #   if the user that added the piece won, send win event
-            if utils.is_won(state, player_to_add, self.n):
+            if utils.is_won(state, player_to_add, n):
                 self.logger.info('player {} won on Client({})'.format(player_to_add, client_id))
                 conn.send(bytes(str(Actions.WIN.value), 'utf8'))
             #   if the board is full, send tie event
