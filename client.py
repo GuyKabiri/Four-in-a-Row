@@ -283,7 +283,7 @@ class ClientGUI:
 
         #   calculate the center of the text to place it in the center of the window
         text_rect = text.get_rect()
-        text_rect.center = (self.width // 2, self.square_size - (self.square_size // 3))
+        text_rect.center = (self.width // 2, (self.square_size * self.options_rows) - (self.square_size // 3))
         self.main_display.blit(text, text_rect)
         self.logger.debug('draw text={}, color={}'.format(txt, color_to_use))
 
@@ -346,13 +346,13 @@ class ClientGUI:
         self.state = Actions.WIN if is_win else Actions.TIE
 
         if self.state == Actions.WIN:
-            self.add_text('Player {} won!'.format(self.id, self.get_turn_color()))
+            self.add_text('Client({}) {} won!'.format(self.id, self.get_turn_color()))
         else:
             self.add_text("It's a tie!")
 
-        yellow_score, red_score = self.wins[0], self.wins[1]
-        num_format = '{:' + str(max(len(str(yellow_score)), len(str(red_score)))) + 'd}'
-        score_format = num_format.format(yellow_score) + ':' + num_format.format(red_score)
+        player1_score, player2_score = self.wins[0], self.wins[1]
+        num_format = '{:' + str(max(len(str(player1_score)), len(str(player2_score)))) + 'd}'
+        score_format = num_format.format(player1_score) + ':' + num_format.format(player2_score)
         self.logger.debug('game over, state={}, scores(yellow:red)=({})'.format(self.state.value, score_format))
 
     
@@ -484,7 +484,7 @@ class ClientGUI:
                                 self.logger.debug('got exit event from server')
                                 self.exit()             
                             elif Actions.WIN.is_equals(action) or Actions.TIE.is_equals(action):
-                                self.game_over_gui(is_win=(self.state == Actions.WIN))
+                                self.game_over_gui(is_win=Actions.WIN.is_equals(action))
                             elif Actions.CONTINUE.is_equals(action):
                                 self.turn = 2 if self.turn == 1 else 1
                                 self.logger.debug('current turn({})'.format(self.turn))
