@@ -5,6 +5,7 @@ import threading, multiprocessing, threading
 from _thread import *
 import socket
 import numpy as np
+import pandas as pd
 from typing import *
 from client import ClientGUI
 from actions import Actions
@@ -12,6 +13,7 @@ import utils
 import logging
 import argparse
 import multiprocessing
+import time
 
 # end of imports
 
@@ -19,6 +21,14 @@ import multiprocessing
 
 class ServerGUI(tk.Tk):
     HEIGHT, WIDTH = 300, 200
+    MAIN_LOG_PATH = 'logs'
+    WINS_CSV_FILE_PATH = os.path.join(MAIN_LOG_PATH, 'wins.csv')
+
+    if not os.path.exists(MAIN_LOG_PATH):
+        os.mkdir(MAIN_LOG_PATH)
+
+    # if not os.path.exists(WINS_CSV_FILE_PATH):
+
 
     def __init__(self) -> None:
         '''
@@ -33,9 +43,6 @@ class ServerGUI(tk.Tk):
         
         self.n = int(args['n'])
         self.log_level = getattr(logging, args['log_level'].upper())
-
-        if not os.path.exists('logs'):
-            os.mkdir('logs')
 
         # date_time_str = datetime.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
         # log_file_name = 'logs/{}.log'.format(date_time_str)
@@ -122,10 +129,11 @@ class ServerGUI(tk.Tk):
             conn.send(bytes(str(Actions.EXIT.value), 'utf8'))
             self.logger.debug('conn {}:{} closed'.format(host, port))
         
-        self.logger.info('Server: closing server conn')
+        self.logger.info('closing server conn')
         self.server_socket.close()
-        
-        # for child in multiprocessing.active_children():
+
+        #   sleep before terminate the logger listener so it will finish to log
+        time.sleep(1)
         self.logger_listener.terminate()
 
         self.destroy()
@@ -173,15 +181,15 @@ class ServerGUI(tk.Tk):
         #   run the main clients loop
         while True:
             #   receive the player id from the client
-            turn_to_add = utils.wait_for_data(conn)
+            player_to_add = utils.wait_for_data(conn)
 
             #   if client sent an exit event, break the main loop
-            if turn_to_add and Actions.EXIT.is_equals(turn_to_add):
+            if player_to_add and Actions.EXIT.is_equals(player_to_add):
                 self.logger.debug('received exit event from Client({})'.format(client_id))
                 break
 
-            elif turn_to_add and Actions.RESET.is_equals(turn_to_add):
-                self.logger.debug('received reset event from Client({})'.format(client_id))
+            elif player_to_add and Actions.RESET.is_equals(player_to_add):
+                self.logger.info('received reset event from Client({})'.format(client_id))
                 state = np.zeros( size, dtype=np.int8 )
                 continue
             
@@ -189,11 +197,11 @@ class ServerGUI(tk.Tk):
             col_to_add = utils.wait_for_data(conn)
 
             #   if none, error occurred
-            if not turn_to_add or not col_to_add:
+            if not player_to_add or not col_to_add:
                 break
             
-            turn_to_add, col_to_add = int(turn_to_add), int(col_to_add)
-            self.logger.debug('got turn({}), col({}) from Client({})'.format(turn_to_add, col_to_add, client_id))
+            player_to_add, col_to_add = int(player_to_add), int(col_to_add)
+            self.logger.info('Client({}) got column={} from player={}'.format(client_id, col_to_add, player_to_add))
 
             #   validate the step, if illegal, send event to notify the client
             if not utils.is_valid_location(col_to_add, state):
@@ -204,13 +212,13 @@ class ServerGUI(tk.Tk):
             self.logger.debug('legal location')
             
             #   add the piece in the requested place and send event to update the client
-            state = utils.add_piece(state, col_to_add, turn_to_add)
+            state = utils.add_piece(state, col_to_add, player_to_add)
             conn.send(bytes(str(Actions.ADD_PIECE.value), 'utf8'))
             self.logger.debug('piece added')
 
             #   if the user that added the piece won, send win event
-            if utils.is_won(state, turn_to_add, self.n):
-                self.logger.debug('send win to Client({})'.format(client_id))
+            if utils.is_won(state, player_to_add, self.n):
+                self.logger.info('player {} won on Client({})'.format(player_to_add, client_id))
                 conn.send(bytes(str(Actions.WIN.value), 'utf8'))
             #   if the board is full, send tie event
             elif utils.is_board_full(state):

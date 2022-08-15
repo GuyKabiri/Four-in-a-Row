@@ -23,6 +23,8 @@ def get_color(color: str) -> List[int]:
         'BLUE':     [0, 0, 255],
         'RED':      [255, 0, 0],
         'YELLOW':   [255, 255, 0],
+        'GREEN':    [0, 127, 0],
+        'ORANGE':   [255, 165, 0],
         'GRAY':     [127, 127, 127],
         'WHITE':    [255, 255, 255],
     }
@@ -31,6 +33,21 @@ def get_color(color: str) -> List[int]:
         color = 'BLACK'
 
     return colors_dict[color]
+
+
+def filter_color(colors_list: List[str], color: str):
+    '''
+    Get a list of colors and filter one color out.
+
+        Parameters:
+            colors_list (list): List of color names.
+            color (str):        A color name to filter out.
+
+        Return:
+            colors_list (list): List with the colors but the one to filter.
+    '''
+
+    return [ c for c in colors_list if c != color ]
 
 
 def is_won(board: np.ndarray, target: int, n: Optional[int] = 4) -> bool:
