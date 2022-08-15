@@ -10,7 +10,6 @@ from client import ClientGUI
 from actions import Actions
 import utils
 import logging
-import datetime
 import argparse
 import multiprocessing
 
@@ -57,7 +56,7 @@ class ServerGUI(tk.Tk):
 
         #   define server's gui window
         self.title('Four in a Row Server')
-        self.iconphoto(False, tk.PhotoImage(file='icon.png'))
+        self.iconphoto(False, tk.PhotoImage(file='assets/icon.png'))
         self.geometry('{}x{}'.format(ServerGUI.HEIGHT, ServerGUI.WIDTH))
         self.minsize(ServerGUI.HEIGHT, ServerGUI.WIDTH)
         self.maxsize(ServerGUI.HEIGHT, ServerGUI.WIDTH)

@@ -157,7 +157,7 @@ class ClientGUI:
         '''
 
         #   set an icon and initiate the gui
-        icon = pygame.image.load('icon.png')
+        icon = pygame.image.load('assets/icon.png')
         pygame.display.set_icon(icon)
         pygame.init()   # initiate the pyGame module
 
