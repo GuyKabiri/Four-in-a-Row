@@ -46,9 +46,6 @@ class ServerGUI(tk.Tk):
         self.clients = []
         self.client_id = 0
 
-        self.origin = Originator()
-        self.caretacker = CareTaker(self.origin)
-
         #   define server's gui window
         self.title('Four in a Row Server')
         self.iconphoto(False, tk.PhotoImage(file='assets/icon.png'))
@@ -170,6 +167,22 @@ class ServerGUI(tk.Tk):
         self.logger.info('socket created {}:{}'.format(host, port))
 
 
+    def reset_game(self, size: Union[Tuple, List]):
+        '''
+        Reset the game board and states.
+
+            Parametes:
+                size (tuple):       The size of the board.
+        '''
+        self.state = np.zeros( size, dtype=np.int8 )
+
+        self.origin = Originator()
+        self.caretacker = CareTaker(self.origin)
+
+        self.origin.set_state(self.state)
+        self.caretacker.do()
+
+
     def run_client(self, conn: socket, client_id: int, size: Union[Tuple, List], n: int) -> None:
         '''
         Maintains the client's state, receive steps and send responses.
@@ -181,10 +194,7 @@ class ServerGUI(tk.Tk):
                 n (int):            Value for n-in-a-row.    
         '''
 
-        #   initiate the board
-        state = np.zeros( size, dtype=np.int8 )
-        self.origin.set_state(state)
-        self.caretacker.do()
+        self.reset_game(size)
 
         #   wait for the client to finish it's setup
         while True:
@@ -206,13 +216,13 @@ class ServerGUI(tk.Tk):
 
             elif action1 and Actions.RESET.is_equals(action1):
                 self.logger.info('received reset event from Client({})'.format(client_id))
-                state = np.zeros( size, dtype=np.int8 )
+                self.reset_game(size)
                 continue
             
             elif action1 and Actions.UNDO.is_equals(action1):
                 self.logger.info('received undo event from Client({})'.format(client_id))
                 if self.caretacker.undo():
-                    state = self.origin.get_state()
+                    self.state = self.origin.get_state()
                 continue
             
             #   receive the step from the client
@@ -227,7 +237,7 @@ class ServerGUI(tk.Tk):
             self.logger.info('Client({}) got column={} from player={}'.format(client_id, column, player))
 
             #   validate the step, if illegal, send event to notify the client
-            if not utils.is_valid_location(column, state):
+            if not utils.is_valid_location(column, self.state):
                 self.logger.warning('send illegal_location to Client({})'.format(client_id))
                 conn.send(bytes(str(Actions.ILLEGAL_LOCATION.value), 'utf8'))
                 continue
@@ -235,19 +245,19 @@ class ServerGUI(tk.Tk):
             self.logger.debug('legal location')
             
             #   add the piece in the requested place and send event to update the client
-            state = utils.add_piece(state, column, player)
+            self.state = utils.add_piece(self.state, column, player)
             conn.send(bytes(str(Actions.ADD_PIECE.value), 'utf8'))
             self.logger.debug('piece added')
 
-            self.origin.set_state(state)
+            self.origin.set_state(self.state)
             self.caretacker.do()
 
             #   if the user that added the piece won, send win event
-            if utils.is_won(state, player, n):
+            if utils.is_won(self.state, player, n):
                 self.logger.info('player {} won on Client({})'.format(player, client_id))
                 conn.send(bytes(str(Actions.WIN.value), 'utf8'))
             #   if the board is full, send tie event
-            elif utils.is_board_full(state):
+            elif utils.is_board_full(self.state):
                 self.logger.debug('send tie to Client({})'.format(client_id))
                 conn.send(bytes(str(Actions.TIE.value), 'utf8'))
             #   if not win and board is not full, send continue event to continue the game

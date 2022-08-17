@@ -258,8 +258,8 @@ class ClientGUI:
                     (width, height),
                     self.radius, 1)
 
-                self.logger.debug('draw circle (row, col)=({}, {}), color={}'.format(r, c, color_name))
         pygame.display.update()
+        self.logger.debug('board={}'.format(self.board))
 
 
     def clear_top(self, all=True) -> None:
