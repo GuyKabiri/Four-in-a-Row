@@ -42,6 +42,7 @@ class ClientGUI:
         self.wins = [0, 0]
         self.player1_color = 'yellow'
         self.player2_color = 'red'
+        self.max_undo = 3
 
         #   calculate the clients gui size based on the amount of rows and cols
         self.calc_window_size()
@@ -70,6 +71,7 @@ class ClientGUI:
         self.board = np.zeros( (self.rows, self.cols), dtype=np.int8 )               #   define the main board state object
 
         self.reset_button = None
+        self.undo_counts = [0, 0]
 
         self.origin = Originator()
         self.caretaker = CareTaker(self.origin)
@@ -358,7 +360,7 @@ class ClientGUI:
                 is_win (bool): Whether it's a win or a tie, default True.
         '''
         if is_win:
-            self.wins[self.turn-1] += 1
+            self.wins[self.turn - 1] += 1
             pygame.mixer.music.load(os.path.join('assets/win.wav'))
         else:
             pygame.mixer.music.load(os.path.join('assets/tie.wav'))
@@ -383,6 +385,9 @@ class ClientGUI:
         '''
         Draws the undo button on the options section.
         '''
+        if self.undo_counts[self.turn - 1] >= self.max_undo:
+            return
+
         #   define the span in each axis
         x_num_squares = 0.5
         y_num_squares = 0.5
@@ -473,16 +478,25 @@ class ClientGUI:
             Returns:
                 did_undo (bool): True if performed undo, False otherwise.
         '''
-        self.client_socket.send(bytes(str(Actions.UNDO.value), 'utf8'))
-        if self.caretaker.undo():
-            self.board = self.origin.get_state()
-            self.turn = 2 if self.turn == 1 else 1
-            self.undo_button = None
-            self.clear_top()
-            self.draw_options()
-            self.draw_board()
-            return True
+        if self.undo_counts[self.turn - 1] < self.max_undo:
+            self.client_socket.send(bytes(str(Actions.UNDO.value), 'utf8'))
+            if self.caretaker.undo():
+                self.board = self.origin.get_state()
+                self.undo_counts[self.turn - 1] += 1
+                self.change_turn()
+                self.undo_button = None
+                self.clear_top()
+                self.draw_options()
+                self.draw_board()
+                return True
         return False
+
+    
+    def change_turn(self):
+        '''
+        Change the turn between the players
+        '''
+        self.turn = 1 if self.turn == 2 else 2
 
 
     def draw_moving_piece(self, mouse_x: int) -> None:
@@ -596,7 +610,7 @@ class ClientGUI:
                             elif Actions.WIN.is_equals(action) or Actions.TIE.is_equals(action):
                                 self.game_over_gui(is_win=Actions.WIN.is_equals(action))
                             elif Actions.CONTINUE.is_equals(action):
-                                self.turn = 2 if self.turn == 1 else 1
+                                self.change_turn()
                                 self.logger.debug('current turn({})'.format(self.turn))
                                 self.draw_undo_button()
 
