@@ -70,17 +70,16 @@ class ServerGUI(tk.Tk):
         self.n_frame = tk.Frame(self.main_frame)
         tk.Label(self.n_frame, text="n=", font=Font(family='Helvetica', size=20, weight='bold')).grid(row=0, column=0)
         n = tk.StringVar(value='4')
-        self.n_value = tk.Spinbox(self.n_frame, textvariable=n, from_=4, to=6, width=2, font=Font(family='Helvetica', size=20, weight='bold'), state='readonly')
+        self.n_value = tk.Spinbox(self.n_frame, textvariable=n, from_=4, to=6, width=2, font=Font(family='Helvetica', size=20, weight='bold'), state='readonly', command=self.validate_n)
         self.n_value.grid(row=0, column=1)
         self.n_frame.pack()
-
 
         #   define rows and cols spinboxes
         self.spin_frame = tk.Frame(self.main_frame)
         rows = tk.StringVar(value='8')
         cols = tk.StringVar(value='8')
-        self.rowsBox = tk.Spinbox(self.spin_frame, textvariable=rows, from_=5, to=10, width=2, font=Font(family='Helvetica', size=20, weight='bold'), state='readonly')
-        self.colsBox = tk.Spinbox(self.spin_frame, textvariable=cols, from_=5, to=10, width=2, font=Font(family='Helvetica', size=20, weight='bold'), state='readonly')
+        self.rowsBox = tk.Spinbox(self.spin_frame, textvariable=rows, from_=5, to=10, width=2, font=Font(family='Helvetica', size=20, weight='bold'), state='readonly', command=self.validate_n)
+        self.colsBox = tk.Spinbox(self.spin_frame, textvariable=cols, from_=5, to=10, width=2, font=Font(family='Helvetica', size=20, weight='bold'), state='readonly', command=self.validate_n)
         self.rowsBox.grid(row=0, column=0, sticky=tk.W,)
         self.colsBox.grid(row=0, column=2, sticky=tk.W,)
         tk.Label(self.spin_frame, text="X", font=Font(family='Helvetica', size=20, weight='bold')).grid(row=0, column=1)
@@ -95,6 +94,20 @@ class ServerGUI(tk.Tk):
         self.create_server_socket()
 
     
+    def validate_n(self):
+        '''
+        Callback function which validates the selected n value with the selected rows or columns.
+        And disabled the start game button if illegal values selected.
+        '''
+        n_val = int(self.n_value.get())
+        rows, cols = int(self.rowsBox.get()), int(self.colsBox.get())
+
+        if n_val > cols and n_val > rows:
+            self.generate_game_button['state'] = tk.DISABLED
+        else:
+            self.generate_game_button['state'] = tk.ACTIVE
+
+
     def create_game(self) -> None:
         '''
         Callback function for the start game button.
@@ -102,6 +115,8 @@ class ServerGUI(tk.Tk):
         '''
         rows, cols = int(self.rowsBox.get()), int(self.colsBox.get())
         n = int(self.n_value.get())
+        if n > cols and n > rows:
+            return
 
         self.client_id += 1
         #   creates new process to start the client's gui on
