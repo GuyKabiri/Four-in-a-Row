@@ -13,6 +13,7 @@ import socket
 from actions import Actions
 from typing import *
 from option_box import OptionBox
+from memento import Originator, CareTaker
 
 
 player_colors_list = ['red', 'yellow', 'green', 'orange']
@@ -37,7 +38,7 @@ class ClientGUI:
         utils.root_logger_configurer(self.queue, log_level)
         self.logger = logging.getLogger('Client({})'.format(self.id))
 
-        self.font_style = 'freesansbold.ttf'
+        self.font_style = pygame.font.match_font('segoeuisymbol')
         self.wins = [0, 0]
         self.player1_color = 'yellow'
         self.player2_color = 'red'
@@ -68,6 +69,12 @@ class ClientGUI:
         self.state = Actions.READY
         self.board = np.zeros( (self.rows, self.cols), dtype=np.int8 )               #   define the main board state object
 
+        self.origin = Originator()
+        self.caretaker = CareTaker(self.origin)
+
+        self.origin.set_state(self.board)
+        self.caretaker.do()
+
 
     def get_turn_color(self) -> None:
         '''
@@ -77,6 +84,16 @@ class ClientGUI:
                 color (str): Capitalized color string.
         '''
         return self.player1_color if self.turn == 1 else self.player2_color
+
+    
+    def get_other_turn_color(self) -> None:
+        '''
+        Returns the color to use based on the other player.
+
+            Returns:
+                color (str): Capitalized color string.
+        '''
+        return self.player2_color if self.turn == 1 else self.player1_color
 
     
     def get_player_color(self, row: int, col: int) -> str:
@@ -186,11 +203,12 @@ class ClientGUI:
                 self.player2_color)
 
         self.reset_button = None
+        self.undo_button = None
 
         pygame.display.update()
         pygame.display.set_caption('Client {}'.format(self.id))
 
-        #   draw the board itself
+        #   draw the board itself and the top bar
         self.draw_board()
         self.draw_options()
 
@@ -237,7 +255,6 @@ class ClientGUI:
                     self.radius, 1)
 
                 self.logger.debug('draw circle (row, col)=({}, {}), color={}'.format(r, c, color_name))
-        pygame.mouse.set_cursor(pygame.cursors.tri_left)
         pygame.display.update()
 
 
@@ -359,6 +376,50 @@ class ClientGUI:
         score_format = num_format.format(player1_score) + ':' + num_format.format(player2_score)
         self.logger.debug('game over, state={}, scores(yellow:red)=({})'.format(self.state.value, score_format))
 
+
+    def draw_undo_button(self) -> None:
+        '''
+        Draws the undo button on the options section.
+        '''
+        #   define the span in each axis
+        x_num_squares = 0.5
+        y_num_squares = 0.5
+
+        #   calculates the X and Y coordinates based on the size of the rectangles of the board
+        x = ((self.cols / 2) - x_num_squares / 2) * self.square_size
+        y = self.square_size * (self.options_rows - 1) * y_num_squares + 5
+
+        color_to_use = self.get_other_turn_color()
+        font = pygame.font.Font(self.font_style, self.font_size)
+        text = font.render('⮌', True, utils.get_color(color_to_use), None)
+
+        self.undo_button = pygame.draw.rect(
+                    self.main_display,
+                    utils.get_color('gray'),
+                    (
+                        x,
+                        y,
+                        self.square_size*x_num_squares,
+                        self.square_size*y_num_squares
+                    )
+                )
+
+        pygame.draw.rect(
+                self.main_display,
+                utils.get_color('black'),
+                (
+                    x,
+                    y,
+                    self.square_size*x_num_squares,
+                    self.square_size*y_num_squares
+                ), 1
+            )
+
+        #   add the undo text in the center of the button
+        text_rect = text.get_rect()
+        text_rect.center = self.undo_button.center
+        self.main_display.blit(text, text_rect)
+
     
     def draw_reset_button(self) -> None:
         '''
@@ -444,7 +505,6 @@ class ClientGUI:
                         self.clear_top()
                         self.draw_board()
                         self.draw_options()
-                        self.draw_reset_button()
                         break
 
                     if self.state == Actions.WIN or self.state == Actions.TIE:
@@ -459,6 +519,18 @@ class ClientGUI:
 
                     elif self.state == Actions.READY:
                         self.logger.debug('mouse button up event')
+
+                        if self.undo_button and self.undo_button.collidepoint(event.pos[0], event.pos[1]):
+                            self.logger.debug('undo button pressed')
+                            self.client_socket.send(bytes(str(Actions.UNDO.value), 'utf8'))
+                            if self.caretaker.undo():
+                                self.board = self.origin.get_state()
+                                self.turn = 2 if self.turn == 1 else 1
+                                self.undo_button = None
+                                self.clear_top()
+                                self.draw_options()
+                                self.draw_board()
+                                continue
 
                         #   get x coordinate of the mouse to calculate the board col
                         col = self.calc_col_by_mouse(event.pos[0])
@@ -480,6 +552,9 @@ class ClientGUI:
                             utils.add_piece(self.board, col, self.turn)
                             self.draw_board()
 
+                            self.origin.set_state(self.board)
+                            self.caretaker.do()
+
                             #   get an win, tie or continue action
                             action = utils.wait_for_data(self.client_socket)
                             self.logger.debug('received action={}'.format(Actions(int(action))))
@@ -492,6 +567,8 @@ class ClientGUI:
                             elif Actions.CONTINUE.is_equals(action):
                                 self.turn = 2 if self.turn == 1 else 1
                                 self.logger.debug('current turn({})'.format(self.turn))
+                                self.draw_undo_button()
+
 
                                 #   if the mouse hovering over the board, draw the top moving circle
                 if (event.type == pygame.MOUSEMOTION or event.type == pygame.MOUSEBUTTONUP):
@@ -506,6 +583,11 @@ class ClientGUI:
                         # calculate the x axis of the circle and draw
                         circle_x = col * self.square_size + self.square_size / 2
                         pygame.draw.circle(self.main_display, color_to_use, (circle_x, int(self.square_size * self.options_rows - self.radius)), self.radius)
+
+                        if self.undo_button and self.undo_button.collidepoint(event.pos[0], event.pos[1]):
+                            pygame.mouse.set_cursor(pygame.cursors.broken_x)
+                        else:
+                            pygame.mouse.set_cursor(pygame.cursors.tri_left)
 
                     elif self.state == Actions.WIN or self.state == Actions.TIE:
                         if self.reset_button and self.reset_button.collidepoint(event.pos[0], event.pos[1]):

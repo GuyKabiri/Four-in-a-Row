@@ -9,8 +9,9 @@ class Actions(enum.Enum):
     TIE =               3
     CONTINUE =          4
     ADD_PIECE =         5
-    ILLEGAL_LOCATION =  6
-    ILLEGAL_DATA =      7
+    UNDO =              6
+    ILLEGAL_LOCATION =  7
+    ILLEGAL_DATA =      8
 
     UNKNOWN =           100
 

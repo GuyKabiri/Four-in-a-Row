@@ -5,7 +5,6 @@ import threading, multiprocessing, threading
 from _thread import *
 import socket
 import numpy as np
-import pandas as pd
 from typing import *
 from client import ClientGUI
 from actions import Actions
@@ -14,6 +13,7 @@ import logging
 import argparse
 import multiprocessing
 import time
+from memento import Originator, CareTaker
 
 # end of imports
 
@@ -21,14 +21,6 @@ import time
 
 class ServerGUI(tk.Tk):
     HEIGHT, WIDTH = 300, 200
-    MAIN_LOG_PATH = 'logs'
-    WINS_CSV_FILE_PATH = os.path.join(MAIN_LOG_PATH, 'wins.csv')
-
-    if not os.path.exists(MAIN_LOG_PATH):
-        os.mkdir(MAIN_LOG_PATH)
-
-    # if not os.path.exists(WINS_CSV_FILE_PATH):
-
 
     def __init__(self) -> None:
         '''
@@ -53,6 +45,9 @@ class ServerGUI(tk.Tk):
 
         self.clients = []
         self.client_id = 0
+
+        self.origin = Originator()
+        self.caretacker = CareTaker(self.origin)
 
         #   define server's gui window
         self.title('Four in a Row Server')
@@ -188,6 +183,8 @@ class ServerGUI(tk.Tk):
 
         #   initiate the board
         state = np.zeros( size, dtype=np.int8 )
+        self.origin.set_state(state)
+        self.caretacker.do()
 
         #   wait for the client to finish it's setup
         while True:
@@ -200,30 +197,37 @@ class ServerGUI(tk.Tk):
         #   run the main clients loop
         while True:
             #   receive the player id from the client
-            player_to_add = utils.wait_for_data(conn)
+            action1 = utils.wait_for_data(conn)
 
             #   if client sent an exit event, break the main loop
-            if player_to_add and Actions.EXIT.is_equals(player_to_add):
+            if action1 and Actions.EXIT.is_equals(action1):
                 self.logger.debug('received exit event from Client({})'.format(client_id))
                 break
 
-            elif player_to_add and Actions.RESET.is_equals(player_to_add):
+            elif action1 and Actions.RESET.is_equals(action1):
                 self.logger.info('received reset event from Client({})'.format(client_id))
                 state = np.zeros( size, dtype=np.int8 )
                 continue
             
+            elif action1 and Actions.UNDO.is_equals(action1):
+                self.logger.info('received undo event from Client({})'.format(client_id))
+                if self.caretacker.undo():
+                    state = self.origin.get_state()
+                continue
+            
             #   receive the step from the client
-            col_to_add = utils.wait_for_data(conn)
+            action2 = utils.wait_for_data(conn)
 
             #   if none, error occurred
-            if not player_to_add or not col_to_add:
+            if not action1 or not action2:
                 break
+
+            player, column = int(action1), int(action2)
             
-            player_to_add, col_to_add = int(player_to_add), int(col_to_add)
-            self.logger.info('Client({}) got column={} from player={}'.format(client_id, col_to_add, player_to_add))
+            self.logger.info('Client({}) got column={} from player={}'.format(client_id, column, player))
 
             #   validate the step, if illegal, send event to notify the client
-            if not utils.is_valid_location(col_to_add, state):
+            if not utils.is_valid_location(column, state):
                 self.logger.warning('send illegal_location to Client({})'.format(client_id))
                 conn.send(bytes(str(Actions.ILLEGAL_LOCATION.value), 'utf8'))
                 continue
@@ -231,13 +235,16 @@ class ServerGUI(tk.Tk):
             self.logger.debug('legal location')
             
             #   add the piece in the requested place and send event to update the client
-            state = utils.add_piece(state, col_to_add, player_to_add)
+            state = utils.add_piece(state, column, player)
             conn.send(bytes(str(Actions.ADD_PIECE.value), 'utf8'))
             self.logger.debug('piece added')
 
+            self.origin.set_state(state)
+            self.caretacker.do()
+
             #   if the user that added the piece won, send win event
-            if utils.is_won(state, player_to_add, n):
-                self.logger.info('player {} won on Client({})'.format(player_to_add, client_id))
+            if utils.is_won(state, player, n):
+                self.logger.info('player {} won on Client({})'.format(player, client_id))
                 conn.send(bytes(str(Actions.WIN.value), 'utf8'))
             #   if the board is full, send tie event
             elif utils.is_board_full(state):
