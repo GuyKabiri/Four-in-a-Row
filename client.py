@@ -69,6 +69,8 @@ class ClientGUI:
         self.state = Actions.READY
         self.board = np.zeros( (self.rows, self.cols), dtype=np.int8 )               #   define the main board state object
 
+        self.reset_button = None
+
         self.origin = Originator()
         self.caretaker = CareTaker(self.origin)
 
@@ -464,6 +466,44 @@ class ClientGUI:
         self.main_display.blit(text, text_rect)
 
 
+    def undo(self) -> None:
+        '''
+        Undo the last move.
+
+            Returns:
+                did_undo (bool): True if performed undo, False otherwise.
+        '''
+        self.client_socket.send(bytes(str(Actions.UNDO.value), 'utf8'))
+        if self.caretaker.undo():
+            self.board = self.origin.get_state()
+            self.turn = 2 if self.turn == 1 else 1
+            self.undo_button = None
+            self.clear_top()
+            self.draw_options()
+            self.draw_board()
+            return True
+        return False
+
+
+    def draw_moving_piece(self, mouse_x: int) -> None:
+        '''
+        Drawing the moving piece on top of the board.
+
+            Parameters:
+                mouse_x (int): The X coordinate of the mouse.
+        '''
+        self.clear_top(all=False)
+        #   get the column index of the mouse
+        col = self.calc_col_by_mouse(mouse_x)
+        #   get the current user color
+        curr_color = self.get_turn_color()
+        #   select the user color or an invalid location color based on the board state
+        color_to_use = utils.get_color(curr_color) if utils.is_valid_location(col, self.board) else utils.get_color('gray')
+        # calculate the x axis of the circle and draw
+        circle_x = col * self.square_size + self.square_size / 2
+        pygame.draw.circle(self.main_display, color_to_use, (circle_x, int(self.square_size * self.options_rows - self.radius)), self.radius)
+
+
     def run_game(self) -> None:
         '''
         The main function to communicate with the server and maintain the state of the game.
@@ -513,23 +553,14 @@ class ClientGUI:
                             self.reset_game_state(self.turn if self.state == Actions.WIN else None)
                             self.client_socket.send(bytes(str(Actions.RESET.value), 'utf8'))
                             self.draw_board()
-                            self.reset_button = None
                             self.clear_top()
-                            self.state = Actions.READY
 
                     elif self.state == Actions.READY:
                         self.logger.debug('mouse button up event')
 
                         if self.undo_button and self.undo_button.collidepoint(event.pos[0], event.pos[1]):
                             self.logger.debug('undo button pressed')
-                            self.client_socket.send(bytes(str(Actions.UNDO.value), 'utf8'))
-                            if self.caretaker.undo():
-                                self.board = self.origin.get_state()
-                                self.turn = 2 if self.turn == 1 else 1
-                                self.undo_button = None
-                                self.clear_top()
-                                self.draw_options()
-                                self.draw_board()
+                            if self.undo():
                                 continue
 
                         #   get x coordinate of the mouse to calculate the board col
@@ -570,19 +601,10 @@ class ClientGUI:
                                 self.draw_undo_button()
 
 
-                                #   if the mouse hovering over the board, draw the top moving circle
+                #   if the mouse hovering over the board, draw the top moving circle
                 if (event.type == pygame.MOUSEMOTION or event.type == pygame.MOUSEBUTTONUP):
                     if self.state == Actions.READY:
-                        self.clear_top(all=False)
-                        #   get the column index of the mouse
-                        col = self.calc_col_by_mouse(event.pos[0])
-                        #   get the current user color
-                        curr_color = self.get_turn_color()
-                        #   select the user color or an invalid location color based on the board state
-                        color_to_use = utils.get_color(curr_color) if utils.is_valid_location(col, self.board) else utils.get_color('gray')
-                        # calculate the x axis of the circle and draw
-                        circle_x = col * self.square_size + self.square_size / 2
-                        pygame.draw.circle(self.main_display, color_to_use, (circle_x, int(self.square_size * self.options_rows - self.radius)), self.radius)
+                        self.draw_moving_piece(event.pos[0])
 
                         if self.undo_button and self.undo_button.collidepoint(event.pos[0], event.pos[1]):
                             pygame.mouse.set_cursor(pygame.cursors.broken_x)
