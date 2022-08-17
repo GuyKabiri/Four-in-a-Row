@@ -6,6 +6,7 @@ import multiprocessing
 import numpy as np
 import socket
 from typing import *
+import os
 
 
 def get_color(color: str) -> List[int]:
@@ -236,8 +237,11 @@ def logger_listener(queue: multiprocessing.Queue, log_level: int):
             queue (Queue):  The queue to read the messages from, and log them to the file.
             log_level(int): The level of log, i.e.: debug, info.
     '''
+    log_folder = 'logs'
+    if not os.path.exists(log_folder):
+        os.mkdir(log_folder)
     date_time_str = datetime.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
-    log_file_name = 'logs/{}.log'.format(date_time_str)
+    log_file_name = os.path.join(log_folder, '{}.log'.format(date_time_str))
 
     root = logging.getLogger()
     file_handler = logging.handlers.RotatingFileHandler(log_file_name, 'a')
