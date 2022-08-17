@@ -340,6 +340,10 @@ class ClientGUI:
         '''
         if is_win:
             self.wins[self.turn-1] += 1
+            pygame.mixer.music.load(os.path.join('assets/win.wav'))
+        else:
+            pygame.mixer.music.load(os.path.join('assets/tie.wav'))
+        pygame.mixer.music.play()
 
         self.clear_top()
 
