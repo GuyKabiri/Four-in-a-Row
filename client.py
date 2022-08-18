@@ -21,7 +21,7 @@ player_colors_list = ['red', 'yellow', 'green', 'orange']
 
 class ClientGUI:
 
-    def __init__(self, id: int, queue: multiprocessing.Queue, log_level: int, size: Union[Tuple, List] = (6, 10)) -> None:
+    def __init__(self, id: int, queue: multiprocessing.Queue, log_level: int, size: Union[Tuple[int], List[int]] = (6, 10)) -> None:
         '''
         Create a new client, define it's gui, board, and create a socket.
 
@@ -196,22 +196,11 @@ class ClientGUI:
         icon = pygame.image.load('assets/icon.png')
         pygame.display.set_icon(icon)
         pygame.init()   # initiate the pyGame module
+        pygame.mouse.set_cursor(pygame.cursors.tri_left)
 
         #   create the main display with black background
         self.main_display = pygame.display.set_mode((self.width, self.height), 0, 32)
         self.main_display.fill(utils.get_color('black'))
-
-        options_box_width = 120
-
-        self.options_player1 = OptionBox(
-                0, 0, options_box_width, 40, pygame.font.Font(self.font_style, self.font_size), 
-                [ clr for clr in utils.filter_color(player_colors_list, self.player2_color) ],
-                self.player1_color)
-
-        self.options_player2 = OptionBox(
-                self.main_display.get_rect().right - options_box_width, 0, 120, 40, pygame.font.Font(self.font_style, self.font_size), 
-                [ clr for clr in utils.filter_color(player_colors_list, self.player1_color) ],
-                self.player2_color)
 
         self.reset_button = None
         self.undo_button = None
@@ -225,7 +214,6 @@ class ClientGUI:
 
         #   draw the board itself and the top bar
         self.draw_board()
-        self.draw_options()
 
 
     def draw_board(self) -> None:
@@ -250,27 +238,15 @@ class ClientGUI:
                     )
                 )
 
-                width = int( c * self.square_size + self.square_size / 2)
-                height = int( r * self.square_size + board_top_offset + self.square_size / 2)
+                center_x = int( c * self.square_size + self.square_size / 2)
+                center_y = int( r * self.square_size + board_top_offset + self.square_size / 2)
 
                 #   second, add a circle with the player's color, or black if empty cell
                 color_name = self.get_player_color(r, c)
-                color_rgb = utils.get_color(color_name)
-                pygame.draw.circle(
-                    self.main_display,
-                    color_rgb,
-                    (width, height),
-                    self.radius)
-                
-                #   add a black ring around the coloed circle
-                pygame.draw.circle(
-                    self.main_display,
-                    utils.get_color('black'),
-                    (width, height),
-                    self.radius, 1)
+                self.draw_circle(color_name, (center_x, center_y))
 
         pygame.display.update()
-        self.logger.debug('board={}'.format(self.board))
+        self.logger.debug('board=\n{}'.format(self.board))
 
 
     def clear_top(self, all=True) -> None:
@@ -284,21 +260,6 @@ class ClientGUI:
         y = 0 if all else self.square_size * (self.options_rows - 1)
         pygame.draw.rect(self.main_display, utils.get_color('black'), (0, y, self.width, self.square_size * num_rows))
         self.draw_scores()
-
-    
-    def draw_options(self):
-        '''
-        Update the color options menus and draw them.
-        '''
-        self.options_player1.set_options(
-            [ clr for clr in utils.filter_color(player_colors_list, self.player2_color) ]
-        )
-        self.options_player2.set_options(
-            [ clr for clr in utils.filter_color(player_colors_list, self.player1_color) ]
-        )
-
-        self.options_player1.draw(self.main_display)
-        self.options_player2.draw(self.main_display)
 
 
     def add_text(self, txt: str) -> None:
@@ -412,26 +373,26 @@ class ClientGUI:
         text = font.render('⮌', True, utils.get_color(color_to_use), None)
 
         self.undo_button = pygame.draw.rect(
-                    self.main_display,
-                    utils.get_color('gray'),
-                    (
-                        x,
-                        y,
-                        self.square_size*x_num_squares,
-                        self.square_size*y_num_squares
-                    )
-                )
+            self.main_display,
+            utils.get_color('gray'),
+            (
+                x,
+                y,
+                self.square_size*x_num_squares,
+                self.square_size*y_num_squares
+            )
+        )
 
         pygame.draw.rect(
-                self.main_display,
-                utils.get_color('black'),
-                (
-                    x,
-                    y,
-                    self.square_size*x_num_squares,
-                    self.square_size*y_num_squares
-                ), 1
-            )
+            self.main_display,
+            utils.get_color('black'),
+            (
+                x,
+                y,
+                self.square_size*x_num_squares,
+                self.square_size*y_num_squares
+            ), 1
+        )
 
         #   add the undo text in the center of the button
         text_rect = text.get_rect()
@@ -455,31 +416,188 @@ class ClientGUI:
         text = font.render('Reset' , True , utils.get_color('black'))
 
         self.reset_button = pygame.draw.rect(
-                    self.main_display,
-                    utils.get_color('gray'),
-                    (
-                        x,
-                        y,
-                        self.square_size*x_num_squares,
-                        self.square_size*y_num_squares
-                    )
-                )
+            self.main_display,
+            utils.get_color('gray'),
+            (
+                x,
+                y,
+                self.square_size*x_num_squares,
+                self.square_size*y_num_squares
+            )
+        )
 
         pygame.draw.rect(
-                self.main_display,
-                utils.get_color('black'),
-                (
-                    x,
-                    y,
-                    self.square_size*x_num_squares,
-                    self.square_size*y_num_squares
-                ), 1
-            )
+            self.main_display,
+            utils.get_color('black'),
+            (
+                x,
+                y,
+                self.square_size*x_num_squares,
+                self.square_size*y_num_squares
+            ), 1
+        )
 
         #   add the reset text in the center of the button
         text_rect = text.get_rect()
         text_rect.center = self.reset_button.center
         self.main_display.blit(text, text_rect)
+
+
+    def draw_main_menu(self) -> None:
+        '''
+        Draws a menu where each player can choose its color and who will play first.
+        '''
+        #   define the span in each axis
+        x_num_squares = 4
+        y_num_squares = 3
+
+        #   calculates the X and Y coordinates based on the size of the rectangles of the board
+        x = ((self.cols / 2) - x_num_squares / 2) * self.square_size
+        y = (((self.rows / 2) - y_num_squares / 2) * self.square_size) + self.square_size * self.options_rows
+
+        self.main_menu = pygame.draw.rect(
+            self.main_display,
+            utils.get_color('gray'),
+            (
+                x,
+                y,
+                self.square_size*x_num_squares,
+                self.square_size*y_num_squares
+            )
+        )
+
+        row_offset = 20
+
+        font = pygame.font.Font(self.font_style, self.font_size)
+        
+        text = font.render('Player 1:' , True , utils.get_color('black'))
+        text_rect = text.get_rect()
+        text_rect.midleft = (x, y + row_offset * 2)
+        self.main_display.blit(text, text_rect)
+
+        text = font.render('Player 2:' , True , utils.get_color('black'))
+        text_rect = text.get_rect()
+        text_rect.midleft = (x, y + row_offset * 4)
+        self.main_display.blit(text, text_rect)
+
+        self.player1_circle = self.draw_circle(self.player1_color, (text_rect.right + 30, y + row_offset * 2), radius=self.radius // 2)
+        self.player2_circle = self.draw_circle(self.player2_color, (text_rect.right + 30, y + row_offset * 4), radius=self.radius // 2)
+
+        text = font.render('Start Game' , True , utils.get_color('black'))
+        x_num_squares = 2.5
+        y_num_squares = 0.75
+
+        # main_menu_rect = self.main_menu.get_rect()
+        text_rect = text.get_rect()
+        x = ((self.cols / 2) - x_num_squares / 2) * self.square_size
+        y = self.main_menu.bottom - text_rect.height - 20
+
+        self.start_button = pygame.draw.rect(
+            self.main_display,
+            utils.get_color('blue'),
+            (
+                x,
+                y,
+                self.square_size*x_num_squares,
+                self.square_size*y_num_squares
+            )
+        )
+
+        pygame.draw.rect(
+            self.main_display,
+            utils.get_color('black'),
+            (
+                x,
+                y,
+                self.square_size*x_num_squares,
+                self.square_size*y_num_squares
+            ), 1
+        )
+
+        text_rect = text.get_rect()
+        text_rect.center = self.start_button.center
+        self.main_display.blit(text, text_rect)
+
+    
+    def handle_main_menu(self, mouse_pos: Union[Tuple[int], List[int]]) -> None:
+        '''
+        Handle the main menu functionality when it has been pressed.
+
+            Parameters:
+                mouse_pos (list): The coordinates of the mouse.
+        '''
+        if self.start_button.collidepoint(mouse_pos[0], mouse_pos[1]):
+            self.main_menu = None
+            self.start_button = None
+            self.player1_circle = None
+            self.player2_circle = None
+            #   send an ready event to the server to notify the client done its setup
+            self.client_socket.send(bytes(str(Actions.READY.value), 'utf8'))
+            self.logger.debug('sent ready event')
+            self.state = Actions.READY
+        
+        elif self.player1_circle.collidepoint(mouse_pos[0], mouse_pos[1]):
+            self.player1_color = self.get_next_color(self.player1_color, self.player2_color)
+
+        elif self.player2_circle.collidepoint(mouse_pos[0], mouse_pos[1]):
+            self.player2_color = self.get_next_color(self.player2_color, self.player1_color)
+
+            
+    def get_next_color(self, my_color: str, other_color: str) -> None:
+        '''
+        Get the next available color from the color list based on the current player and opponent colors.
+
+            Parameters:
+                my_color (str):     The color of the current player.
+                other_color (str):  The color of the opponent.
+            
+            Returns:
+                color (str):        The next color that can be used.
+        '''
+        #   get list of all colors but the opponent
+        available_colors = [ c for c in player_colors_list if c != other_color ]
+        #   get current color based on the new list
+        index = available_colors.index(my_color)
+        #   iterate over the colors until find an unused one
+        while my_color == available_colors[index]:
+            index += 1
+            if index >= len(available_colors):
+                index = 0
+        return available_colors[index]
+        
+        
+    def draw_circle(self, color: str, center: Union[Tuple[int], List[int]], radius: Optional[int] = None):
+        '''
+        Draw a single circle on the screen and returns it.
+
+            Parameters:
+                color (str):    The name of the color to use.
+                center (list):  The X and Y coordinates of the center of the circle.
+                radius (int):   The radius to use, default None will use the default radius.
+
+            Returns:
+                circle (pygame.Rect): The rectangle boundaries of the circle that was drawn.
+        '''
+        if not radius:
+            radius = self.radius
+
+        color_rgb = utils.get_color(color)
+        circle = pygame.draw.circle(
+            self.main_display,
+            color_rgb,
+            center,
+            radius
+        )
+
+        pygame.draw.circle(
+            self.main_display,
+            utils.get_color('black'),
+            center,
+            radius,
+            1
+        )
+
+        return circle
 
 
     def undo(self) -> None:
@@ -497,13 +615,12 @@ class ClientGUI:
                 self.change_turn()
                 self.undo_button = None
                 self.clear_top()
-                self.draw_options()
                 self.draw_board()
                 return True
         return False
 
     
-    def change_turn(self):
+    def change_turn(self) -> None:
         '''
         Change the turn between the players
         '''
@@ -520,13 +637,11 @@ class ClientGUI:
         self.clear_top(all=False)
         #   get the column index of the mouse
         col = self.calc_col_by_mouse(mouse_x)
-        #   get the current user color
-        curr_color = self.get_turn_color()
         #   select the user color or an invalid location color based on the board state
-        color_to_use = utils.get_color(curr_color) if utils.is_valid_location(col, self.board) else utils.get_color('gray')
+        color_to_use = self.get_turn_color() if utils.is_valid_location(col, self.board) else 'gray'
         # calculate the x axis of the circle and draw
         circle_x = col * self.square_size + self.square_size / 2
-        pygame.draw.circle(self.main_display, color_to_use, (circle_x, int(self.square_size * self.options_rows - self.radius)), self.radius)
+        self.draw_circle(color_to_use, (circle_x, int(self.square_size * self.options_rows - self.radius)))
 
 
     def run_game(self) -> None:
@@ -534,12 +649,9 @@ class ClientGUI:
         The main function to communicate with the server and maintain the state of the game.
         '''
 
-        #   send an ready event to the server to notify the client done its setup
-        self.client_socket.send(bytes(str(Actions.READY.value), 'utf8'))
-        self.logger.debug('sent ready event')
-
         self.draw_scores()
         action = Actions.UNKNOWN
+        self.state = Actions.PRE_GAME
         time.sleep(1)
         while True:
             #   if received an exit event
@@ -548,28 +660,21 @@ class ClientGUI:
                 self.logger.debug('received exit event from server')
                 self.exit()
 
+            if self.state == Actions.PRE_GAME:
+                self.draw_main_menu()
+
             #   iterate over the pygame events
             for event in pygame.event.get():
                 #   if exit event
                 if event.type == pygame.QUIT:
                     self.logger.debug('pygame exit event')
-                    self.exit(should_send=True)            
+                    self.exit(should_send=True)        
 
                 #   if a mouse click event
                 if event.type == pygame.MOUSEBUTTONUP:
 
-                    selected_option1 = self.options_player1.update(event)
-                    if selected_option1 >= 0:
-                        self.player1_color = self.options_player1.get_selected_text()
-
-                    selected_option2 = self.options_player2.update(event)
-                    if selected_option2 >= 0:
-                        self.player2_color = self.options_player2.get_selected_text()
-                    
-                    if selected_option1 >= -1 or selected_option2 >= -1:
-                        self.clear_top()
-                        self.draw_board()
-                        self.draw_options()
+                    if self.main_menu and self.main_menu.collidepoint(event.pos[0], event.pos[1]):
+                        self.handle_main_menu((event.pos[0], event.pos[1]))
                         break
 
                     if self.state == Actions.WIN or self.state == Actions.TIE:
@@ -631,16 +736,16 @@ class ClientGUI:
                     if self.state == Actions.READY:
                         self.draw_moving_piece(event.pos[0])
 
-                        if self.undo_button and self.undo_button.collidepoint(event.pos[0], event.pos[1]):
-                            pygame.mouse.set_cursor(pygame.cursors.broken_x)
-                        else:
-                            pygame.mouse.set_cursor(pygame.cursors.tri_left)
+                    #     if self.undo_button and self.undo_button.collidepoint(event.pos[0], event.pos[1]):
+                    #         pygame.mouse.set_cursor(pygame.cursors.broken_x)
+                    #     else:
+                    #         pygame.mouse.set_cursor(pygame.cursors.tri_left)
 
-                    elif self.state == Actions.WIN or self.state == Actions.TIE:
-                        if self.reset_button and self.reset_button.collidepoint(event.pos[0], event.pos[1]):
-                            pygame.mouse.set_cursor(pygame.cursors.broken_x)
-                        else:
-                            pygame.mouse.set_cursor(pygame.cursors.tri_left)    
+                    # elif self.state == Actions.WIN or self.state == Actions.TIE:
+                    #     if self.reset_button and self.reset_button.collidepoint(event.pos[0], event.pos[1]):
+                    #         pygame.mouse.set_cursor(pygame.cursors.broken_x)
+                    #     else:
+                    #         pygame.mouse.set_cursor(pygame.cursors.tri_left)    
 
                 #   if the mouse is out of the window, clear the top row with black rectangle
                 if event.type == pygame.WINDOWLEAVE and self.state == Actions.READY:
@@ -650,7 +755,6 @@ class ClientGUI:
                 self.draw_board()
             else:
                 self.draw_reset_button()
-            self.draw_options()
             
                 # if self.state == Actions.WIN or self.state == Actions.TIE:
                 #     print('fff')

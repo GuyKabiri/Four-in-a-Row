@@ -2,8 +2,10 @@ import enum
 from typing import Any
 
 class Actions(enum.Enum):
-    EXIT =              -2
-    RESET =             -1
+    EXIT =              -3
+    RESET =             -2
+    PRE_GAME =          -1
+    
     READY =             1
     WIN =               2
     TIE =               3
