@@ -51,7 +51,10 @@ class ServerGUI(tk.Tk):
         self.create_server_socket()
 
 
-    def create_server_gui(self):
+    def create_server_gui(self) -> None:
+        '''
+        Generate the server gui.
+        '''
         #   define server's gui window
         self.title('Four in a Row Server')
         self.iconphoto(False, tk.PhotoImage(file='assets/icon.png'))

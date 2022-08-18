@@ -24,6 +24,12 @@ class ClientGUI:
     def __init__(self, id: int, queue: multiprocessing.Queue, log_level: int, size: Union[Tuple, List] = (6, 10)) -> None:
         '''
         Create a new client, define it's gui, board, and create a socket.
+
+            Parameters:
+                id (int):                       The id of the client.
+                queue (multiprocessing.Queue):  The queue to push the logs in.
+                log_level (int):                The log level to use.
+                size (tuple):                   Size of board to use.
         '''
         self.id = id
 
