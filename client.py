@@ -14,6 +14,7 @@ from actions import Actions
 from typing import *
 from option_box import OptionBox
 from memento import Originator, CareTaker
+from win32gui import SetWindowPos
 
 
 player_colors_list = ['red', 'yellow', 'green', 'orange']
@@ -211,6 +212,10 @@ class ClientGUI:
 
         pygame.display.update()
         pygame.display.set_caption('Client {}'.format(self.id))
+
+        #   pyGame module does not support topmost attribute as Tkinter does
+        #   in the following the -1 variable used as topmost
+        SetWindowPos(pygame.display.get_wm_info()['window'], -1, 0, 0, 0, 0, 1)
 
         #   draw the board itself and the top bar
         self.draw_board()

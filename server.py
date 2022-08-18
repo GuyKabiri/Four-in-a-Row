@@ -46,6 +46,12 @@ class ServerGUI(tk.Tk):
         self.clients = []
         self.client_id = 0
 
+        self.create_server_gui()
+
+        self.create_server_socket()
+
+
+    def create_server_gui(self):
         #   define server's gui window
         self.title('Four in a Row Server')
         self.iconphoto(False, tk.PhotoImage(file='assets/icon.png'))
@@ -56,34 +62,30 @@ class ServerGUI(tk.Tk):
         # on exit event, run the close_all functions
         self.protocol("WM_DELETE_WINDOW", self.close_all)
 
-        self.main_frame = tk.Frame()
-
         #   define n-in-a-row frame
-        self.n_frame = tk.Frame(self.main_frame)
-        tk.Label(self.n_frame, text="n=", font=Font(family='Helvetica', size=20, weight='bold')).grid(row=0, column=0)
+        self.n_frame = tk.Frame(self)
         n = tk.StringVar(value='4')
         self.n_value = tk.Spinbox(self.n_frame, textvariable=n, from_=4, to=6, width=2, font=Font(family='Helvetica', size=20, weight='bold'), state='readonly', command=self.validate_n)
-        self.n_value.grid(row=0, column=1)
+        self.n_value.grid(row=0, column=0)
+        tk.Label(self.n_frame, text=" in a row", font=Font(family='Helvetica', size=20, weight='bold')).grid(row=0, column=1)
         self.n_frame.pack()
 
         #   define rows and cols spinboxes
-        self.spin_frame = tk.Frame(self.main_frame)
+        self.spin_frame = tk.Frame(self)
         rows = tk.StringVar(value='8')
         cols = tk.StringVar(value='8')
         self.rowsBox = tk.Spinbox(self.spin_frame, textvariable=rows, from_=5, to=10, width=2, font=Font(family='Helvetica', size=20, weight='bold'), state='readonly', command=self.validate_n)
         self.colsBox = tk.Spinbox(self.spin_frame, textvariable=cols, from_=5, to=10, width=2, font=Font(family='Helvetica', size=20, weight='bold'), state='readonly', command=self.validate_n)
         self.rowsBox.grid(row=0, column=0, sticky=tk.W,)
         self.colsBox.grid(row=0, column=2, sticky=tk.W,)
-        tk.Label(self.spin_frame, text="X", font=Font(family='Helvetica', size=20, weight='bold')).grid(row=0, column=1)
+        tk.Label(self.spin_frame, text=" X ", font=Font(family='Helvetica', size=20, weight='bold')).grid(row=0, column=1)
         self.spin_frame.pack()
 
         #   define start button
-        self.generate_game_button = tk.Button(self.main_frame, text='Start Play', font=Font(family='Helvetica', size=18, weight='bold'), command=self.create_game)
+        self.generate_game_button = tk.Button(self, text='Start Play', font=Font(family='Helvetica', size=18, weight='bold'), command=self.create_game)
         self.generate_game_button.pack()
         
-        self.main_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-
-        self.create_server_socket()
+        self.attributes("-topmost", True)
 
     
     def validate_n(self):
