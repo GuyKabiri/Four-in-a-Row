@@ -8,6 +8,7 @@ import socket
 from typing import *
 import os
 
+Couple = Union[Tuple[int], List[int]]
 
 def get_color(color: str) -> List[int]:
     '''
@@ -224,7 +225,7 @@ def wait_for_data(conn: socket, timeout: Optional[float] = None) -> bytes:
         data = conn.recv(1024)
         if not data:
             return None
-    except socket.error as e:
+    except Exception as e:
         return None
     return data
 

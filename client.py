@@ -12,16 +12,16 @@ import utils
 import socket
 from actions import Actions
 from typing import *
-from option_box import OptionBox
 from memento import Originator, CareTaker
 from win32gui import SetWindowPos
+from button import Button
 
 
 player_colors_list = ['red', 'yellow', 'green', 'orange']
 
 class ClientGUI:
 
-    def __init__(self, id: int, queue: multiprocessing.Queue, log_level: int, size: Union[Tuple[int], List[int]] = (6, 10)) -> None:
+    def __init__(self, id: int, queue: multiprocessing.Queue, log_level: int, size: utils.Couple = (6, 10)) -> None:
         '''
         Create a new client, define it's gui, board, and create a socket.
 
@@ -148,7 +148,7 @@ class ClientGUI:
 
         try:
             self.client_socket.connect( (self.host, self.port) )
-        except socket.error as e:
+        except Exception as e:
             self.logger.error(str(e))
             self.client_socket.close()
         self.logger.info('created conn {}:{}'.format(self.host, self.port))
@@ -202,6 +202,7 @@ class ClientGUI:
         self.main_display = pygame.display.set_mode((self.width, self.height), 0, 32)
         self.main_display.fill(utils.get_color('black'))
 
+        
         self.reset_button = None
         self.undo_button = None
 
@@ -262,7 +263,7 @@ class ClientGUI:
         self.draw_scores()
 
 
-    def add_text(self, txt: str) -> None:
+    def draw_text_top(self, txt: str) -> None:
         '''
         Adds text in the top black rectangle.
 
@@ -331,26 +332,65 @@ class ClientGUI:
             Parameters:
                 is_win (bool): Whether it's a win or a tie, default True.
         '''
-        if is_win:
-            self.wins[self.turn - 1] += 1
-            pygame.mixer.music.load(os.path.join('assets/win.wav'))
-        else:
-            pygame.mixer.music.load(os.path.join('assets/tie.wav'))
-        pygame.mixer.music.play()
+        try:
+            if is_win:
+                self.wins[self.turn - 1] += 1
+                pygame.mixer.music.load(os.path.join('assets/win.wav'))
+            else:
+                pygame.mixer.music.load(os.path.join('assets/tie.wav'))
+            pygame.mixer.music.play()
+        except Exception as e:
+            self.logger.error('error playing sound: {}'.format(str(e)))
 
         self.clear_top()
 
         self.state = Actions.WIN if is_win else Actions.TIE
 
         if self.state == Actions.WIN:
-            self.add_text('Client({}) {} won!'.format(self.id, self.get_turn_color()))
+            self.draw_text_top('Client({}) {} won!'.format(self.id, self.get_turn_color()))
         else:
-            self.add_text("It's a tie!")
+            self.draw_text_top("It's a tie!")
 
         player1_score, player2_score = self.wins[0], self.wins[1]
         num_format = '{:' + str(max(len(str(player1_score)), len(str(player2_score)))) + 'd}'
         score_format = num_format.format(player1_score) + ':' + num_format.format(player2_score)
         self.logger.debug('game over, state={}, scores(yellow:red)=({})'.format(self.state.value, score_format))
+    
+
+    def draw_button(self, position: utils.Couple, size: utils.Couple, text: str, btn_color: str, txt_color: str, bold: bool = False, callback: Callable = None) -> pygame.Rect:
+        '''
+        Draw a button and return it.
+
+            Parameters:
+                position (tuple):       The top left X and Y coordinates to draw the button.
+                size (tuple):           The width and height of the button.
+                text (str):             Text of the button.
+                btn_color (str):        The color name of the button.
+                txt_color (str):        The color name of the text.
+                bold (bool):            Whether to draw the text in bold or not, default False.
+                callback (Callable):    A callback function to run
+
+            Returns:
+                btn (pygame.Rect):  The button object.
+        '''
+        if not isinstance(position, (list, tuple)) or not isinstance(size, (list, tuple)):
+            return
+        
+        x, y = position[0], position[1]
+        width, height = size[0], size[1]
+
+        font = pygame.font.Font(self.font_style, self.font_size)
+        text = font.render(text, True, utils.get_color(txt_color), None)
+
+        button = pygame.draw.rect(self.main_display, utils.get_color(btn_color), (x, y, width, height))
+
+        pygame.draw.rect(self.main_display, utils.get_color('black'), (x, y, width, height), 1)
+
+        #   add the undo text in the center of the button
+        text_rect = text.get_rect()
+        text_rect.center = button.center
+        self.main_display.blit(text, text_rect)
+        return button
 
 
     def draw_undo_button(self) -> None:
@@ -367,37 +407,11 @@ class ClientGUI:
         #   calculates the X and Y coordinates based on the size of the rectangles of the board
         x = ((self.cols / 2) - x_num_squares / 2) * self.square_size
         y = self.square_size * (self.options_rows - 1) * y_num_squares + 5
-
+        width = self.square_size * x_num_squares
+        height = self.square_size * y_num_squares
         color_to_use = self.get_other_turn_color()
-        font = pygame.font.Font(self.font_style, self.font_size)
-        text = font.render('⮌', True, utils.get_color(color_to_use), None)
 
-        self.undo_button = pygame.draw.rect(
-            self.main_display,
-            utils.get_color('gray'),
-            (
-                x,
-                y,
-                self.square_size*x_num_squares,
-                self.square_size*y_num_squares
-            )
-        )
-
-        pygame.draw.rect(
-            self.main_display,
-            utils.get_color('black'),
-            (
-                x,
-                y,
-                self.square_size*x_num_squares,
-                self.square_size*y_num_squares
-            ), 1
-        )
-
-        #   add the undo text in the center of the button
-        text_rect = text.get_rect()
-        text_rect.center = self.undo_button.center
-        self.main_display.blit(text, text_rect)
+        self.undo_button = self.draw_button((x, y), (width, height), '⮌', 'gray', color_to_use)
 
     
     def draw_reset_button(self) -> None:
@@ -411,36 +425,13 @@ class ClientGUI:
         #   calculates the X and Y coordinates based on the size of the rectangles of the board
         x = ((self.cols / 2) - x_num_squares / 2) * self.square_size
         y = (((self.rows / 2) - y_num_squares / 2) * self.square_size) + self.square_size * self.options_rows
+        width = self.square_size*x_num_squares
+        height = self.square_size*y_num_squares
 
         font = pygame.font.Font(self.font_style, self.font_size)
         text = font.render('Reset' , True , utils.get_color('black'))
 
-        self.reset_button = pygame.draw.rect(
-            self.main_display,
-            utils.get_color('gray'),
-            (
-                x,
-                y,
-                self.square_size*x_num_squares,
-                self.square_size*y_num_squares
-            )
-        )
-
-        pygame.draw.rect(
-            self.main_display,
-            utils.get_color('black'),
-            (
-                x,
-                y,
-                self.square_size*x_num_squares,
-                self.square_size*y_num_squares
-            ), 1
-        )
-
-        #   add the reset text in the center of the button
-        text_rect = text.get_rect()
-        text_rect.center = self.reset_button.center
-        self.main_display.blit(text, text_rect)
+        self.reset_button = self.draw_button((x, y), (width, height), 'Reset', 'gray', 'black')
 
 
     def draw_main_menu(self) -> None:
@@ -470,56 +461,36 @@ class ClientGUI:
 
         font = pygame.font.Font(self.font_style, self.font_size)
         
-        text = font.render('Player 1:' , True , utils.get_color('black'))
-        text_rect = text.get_rect()
-        text_rect.midleft = (x, y + row_offset * 2)
-        self.main_display.blit(text, text_rect)
+        font.set_bold(self.turn == 1)
+        text = font.render('{} Player 1:'.format('🠖' if self.turn == 1 else '    '), True , utils.get_color('black'))
+        self.player1_text = text.get_rect()
+        self.player1_text.midleft = (x, y + row_offset * 2)
+        self.main_display.blit(text, self.player1_text)
 
-        text = font.render('Player 2:' , True , utils.get_color('black'))
-        text_rect = text.get_rect()
-        text_rect.midleft = (x, y + row_offset * 4)
-        self.main_display.blit(text, text_rect)
+        font.set_bold(self.turn == 2)
+        text = font.render('{} Player 2:'.format('🠖' if self.turn == 2 else '    '), True , utils.get_color('black'))
+        self.player2_text = text.get_rect()
+        self.player2_text.midleft = (x, y + row_offset * 4)
+        self.main_display.blit(text, self.player2_text)
 
-        self.player1_circle = self.draw_circle(self.player1_color, (text_rect.right + 30, y + row_offset * 2), radius=self.radius // 2)
-        self.player2_circle = self.draw_circle(self.player2_color, (text_rect.right + 30, y + row_offset * 4), radius=self.radius // 2)
+        right_most = max(self.player1_text.right, self.player2_text.right)
 
-        text = font.render('Start Game' , True , utils.get_color('black'))
+        self.player1_circle = self.draw_circle(self.player1_color, (right_most + 40, y + row_offset * 2), radius=self.radius // 2)
+        self.player2_circle = self.draw_circle(self.player2_color, (right_most + 40, y + row_offset * 4), radius=self.radius // 2)
+
         x_num_squares = 2.5
         y_num_squares = 0.75
 
-        # main_menu_rect = self.main_menu.get_rect()
-        text_rect = text.get_rect()
         x = ((self.cols / 2) - x_num_squares / 2) * self.square_size
-        y = self.main_menu.bottom - text_rect.height - 20
+        width = self.square_size * x_num_squares
+        height = self.square_size * y_num_squares
+        y = self.main_menu.bottom - height - 20
 
-        self.start_button = pygame.draw.rect(
-            self.main_display,
-            utils.get_color('blue'),
-            (
-                x,
-                y,
-                self.square_size*x_num_squares,
-                self.square_size*y_num_squares
-            )
-        )
 
-        pygame.draw.rect(
-            self.main_display,
-            utils.get_color('black'),
-            (
-                x,
-                y,
-                self.square_size*x_num_squares,
-                self.square_size*y_num_squares
-            ), 1
-        )
-
-        text_rect = text.get_rect()
-        text_rect.center = self.start_button.center
-        self.main_display.blit(text, text_rect)
+        self.start_button = self.draw_button((x, y), (width, height), 'Start Game', 'blue', 'black')
 
     
-    def handle_main_menu(self, mouse_pos: Union[Tuple[int], List[int]]) -> None:
+    def handle_main_menu(self, mouse_pos: utils.Couple) -> None:
         '''
         Handle the main menu functionality when it has been pressed.
 
@@ -531,6 +502,9 @@ class ClientGUI:
             self.start_button = None
             self.player1_circle = None
             self.player2_circle = None
+            self.player1_text = None
+            self.player2_text = None
+
             #   send an ready event to the server to notify the client done its setup
             self.client_socket.send(bytes(str(Actions.READY.value), 'utf8'))
             self.logger.debug('sent ready event')
@@ -541,6 +515,9 @@ class ClientGUI:
 
         elif self.player2_circle.collidepoint(mouse_pos[0], mouse_pos[1]):
             self.player2_color = self.get_next_color(self.player2_color, self.player1_color)
+
+        elif self.player1_text.collidepoint(mouse_pos[0], mouse_pos[1]) or self.player2_text.collidepoint(mouse_pos[0], mouse_pos[1]):
+            self.change_turn()
 
             
     def get_next_color(self, my_color: str, other_color: str) -> None:
@@ -566,7 +543,7 @@ class ClientGUI:
         return available_colors[index]
         
         
-    def draw_circle(self, color: str, center: Union[Tuple[int], List[int]], radius: Optional[int] = None):
+    def draw_circle(self, color: str, center: utils.Couple, radius: Optional[int] = None):
         '''
         Draw a single circle on the screen and returns it.
 
@@ -578,24 +555,16 @@ class ClientGUI:
             Returns:
                 circle (pygame.Rect): The rectangle boundaries of the circle that was drawn.
         '''
+        if not isinstance(center, (tuple, list)):
+            return
+
         if not radius:
             radius = self.radius
 
         color_rgb = utils.get_color(color)
-        circle = pygame.draw.circle(
-            self.main_display,
-            color_rgb,
-            center,
-            radius
-        )
+        circle = pygame.draw.circle(self.main_display, color_rgb, center, radius)
 
-        pygame.draw.circle(
-            self.main_display,
-            utils.get_color('black'),
-            center,
-            radius,
-            1
-        )
+        pygame.draw.circle(self.main_display, utils.get_color('black'), center, radius, 1)
 
         return circle
 
@@ -648,8 +617,6 @@ class ClientGUI:
         '''
         The main function to communicate with the server and maintain the state of the game.
         '''
-
-        self.draw_scores()
         action = Actions.UNKNOWN
         self.state = Actions.PRE_GAME
         time.sleep(1)
@@ -710,7 +677,7 @@ class ClientGUI:
 
                         #   if action is to add a piece
                         if Actions.ADD_PIECE.is_equals(action):
-                            utils.add_piece(self.board, col, self.turn)
+                            self.board = utils.add_piece(self.board, col, self.turn)
                             self.draw_board()
 
                             self.origin.set_state(self.board)
@@ -753,7 +720,8 @@ class ClientGUI:
             
             if self.state == Actions.READY:
                 self.draw_board()
-            else:
+                self.draw_scores()
+            elif self.state == Actions.WIN or self.state == Actions.TIE:
                 self.draw_reset_button()
             
                 # if self.state == Actions.WIN or self.state == Actions.TIE:

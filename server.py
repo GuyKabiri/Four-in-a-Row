@@ -165,14 +165,14 @@ class ServerGUI(tk.Tk):
         try:
             self.server_socket.bind( (self.host, self.port) )
             self.server_socket.listen()
-        except socket.error as e:
+        except Exception as e:
             self.server_socket.close()
             self.logger.error(str(e))
         host, port = self.server_socket.getsockname()
         self.logger.info('socket created {}:{}'.format(host, port))
 
 
-    def reset_game(self, size: Union[Tuple, List]):
+    def reset_game(self, size: utils.Couple):
         '''
         Reset the game board and states.
 
@@ -188,7 +188,7 @@ class ServerGUI(tk.Tk):
         self.caretacker.do()
 
 
-    def run_client(self, conn: socket, client_id: int, size: Union[Tuple, List], n: int) -> None:
+    def run_client(self, conn: socket, client_id: int, size: utils.Couple, n: int) -> None:
         '''
         Maintains the client's state, receive steps and send responses.
 
