@@ -1,4 +1,5 @@
 import os
+from subprocess import call
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = 'hide'
 import time
 import pygame
@@ -299,6 +300,7 @@ class ClientGUI:
         player1_score, player2_score = str(self.wins[0]), str(self.wins[1])
 
         font = pygame.font.Font(self.font_style, self.font_size)
+        font.set_bold(True)
         text_1 = font.render(player1_score, True, utils.get_color(self.player1_color),      utils.get_color('black'))
         text_2 = font.render(player2_score, True, utils.get_color(self.player2_color),      utils.get_color('black'))
         text_c = font.render(':',           True, utils.get_color('gray'),                  utils.get_color('black'))
@@ -385,7 +387,7 @@ class ClientGUI:
         height = self.square_size * y_num_squares
         color_to_use = self.get_other_turn_color()
 
-        self.undo_button = Button((x, y), (width, height), '⮌', 'gray', color_to_use, self.font, False, self.handle_undo)
+        self.undo_button = Button(position=(x, y), size=(width, height), btn_color=color_to_use, callback=self.handle_undo, is_active=False, img_path='assets/undo.png')
 
     
     def create_reset_button(self) -> None:
@@ -402,7 +404,8 @@ class ClientGUI:
         width = self.square_size*x_num_squares
         height = self.square_size*y_num_squares
 
-        self.reset_button = Button((x, y), (width, height), 'Reset', 'gray', 'black', self.font, False, self.handle_reset)
+        self.reset_button = Button(position=(x, y), size=(width, height), btn_color='gray', callback=self.handle_reset, is_active=False,
+                                    text='Reset', txt_color='black', font=self.font)
 
 
     def draw_main_menu(self) -> None:
@@ -456,7 +459,7 @@ class ClientGUI:
             height = self.square_size * y_num_squares
             y = self.main_menu.bottom - height - 20
 
-            self.start_button = Button((x, y), (width, height), 'Start Game', 'blue', 'black', self.font, True, self.handle_start)
+            self.start_button = Button(position=(x, y), size=(width, height), btn_color='blue', callback=self.handle_start, is_active=True, text='Start Game', txt_color='black', font=self.font)
 
         self.start_button.draw(self.main_display)
 
@@ -621,6 +624,8 @@ class ClientGUI:
                     self.draw_main_menu()
                     if self.start_button.handle_event(event):
                         should_draw_board = True
+                        self.draw_scores()
+                        self.draw_moving_piece(event.pos[0])
                         continue
                     if self.handle_main_menu(event):
                         continue
@@ -643,6 +648,7 @@ class ClientGUI:
                 #   if a mouse click event
                 if event.type == pygame.MOUSEBUTTONUP:
                     self.undo_button.set_active(False)
+                    self.undo_button.button_color = self.get_turn_color()
                     if self.state == Actions.READY:
                         self.logger.debug('mouse button up event')
 

@@ -4,19 +4,21 @@ import utils
 
 class Button:
 
-    def __init__(self, position: utils.Couple, size: utils.Couple, text: str, btn_color: str, txt_color: str, font: pygame.font, is_active: bool = True, callback: Callable = None) -> None:
+    def __init__(self, position: utils.Couple, size: utils.Couple, btn_color: str, callback: Callable = None, is_active: bool = True,
+        img_path: Optional[str] = '', text: Optional[str] = '', txt_color: Optional[str] = 'black', font: Optional[pygame.font.Font] = None) -> None:
         '''
         Create a new button.
 
             Parameters:
                 position (tuple):       The top left X and Y coordinates to draw the button.
                 size (tuple):           The width and height of the button.
-                text (str):             Text of the button.
                 btn_color (str):        The color name of the button.
-                txt_color (str):        The color name of the text.
-                font (pygame.font):     Font to draw the text.
-                is_active (bool):       Whether the button is active or not.
                 callback (Callable):    A callback function to run.
+                is_active (bool):       Whether the button is active or not, default True.
+                img_path (str):         Path to an image, default empty string,
+                text (str):             Text of the button, default empty string.
+                txt_color (str):        The color name of the text, default black.
+                font (pygame.font):     Font to draw the text, default None.
         '''
         if not isinstance(position, (list, tuple)) or not isinstance(size, (list, tuple)):
             return
@@ -31,6 +33,12 @@ class Button:
         self.text_color = txt_color
         self.font = font
         self.is_active = is_active
+
+        self.image = None
+        if img_path != '':
+            img_offset = 2
+            self.image = pygame.image.load(img_path)
+            self.image = pygame.transform.scale(self.image, (self.width - img_offset, self.height - img_offset))
 
         self.collide = False
         self.rect = None
@@ -49,8 +57,9 @@ class Button:
             return
 
         #   if mouse collide with the button, set the text to bold
-        self.font.set_bold(self.collide)
-        text = self.font.render(self.text, True, utils.get_color(self.text_color), None)
+        if self.font:
+            self.font.set_bold(self.collide)
+            text = self.font.render(self.text, True, utils.get_color(self.text_color), None)
 
         position_and_size = (
             self.x,
@@ -73,9 +82,15 @@ class Button:
         )
 
         #   add the undo text in the center of the button
-        text_rect = text.get_rect()
-        text_rect.center = self.rect.center
-        surf.blit(text, text_rect)
+        if self.font:
+            text_rect = text.get_rect()
+            text_rect.center = self.rect.center
+            surf.blit(text, text_rect)
+        
+        if self.image:
+            image_rect = self.image.get_rect()
+            image_rect.center = self.rect.center
+            surf.blit(self.image, image_rect)
 
     
     def handle_event(self, event):
