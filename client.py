@@ -1,20 +1,18 @@
 import os
-from subprocess import call
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = 'hide'
 import time
-import pygame
-import tkinter as tk
 import multiprocessing
 import logging
-import numpy as np
 import sys
 import math
 import utils
 import socket
-from actions import Actions
+import pygame
+import tkinter as tk
+import numpy as np
 from typing import *
+from actions import Actions
 from memento import Originator, CareTaker
-from win32gui import SetWindowPos
 from button import Button
 
 
@@ -66,35 +64,6 @@ class ClientGUI:
         self.run_game()
 
 
-    def handle_reset(self) -> bool:
-        '''
-        Reset the state of the game.
-         
-            Parameters:
-                event (pygame.event): The event that occurred, default None.
-        '''
-        if self.state == Actions.WIN or self.state == Actions.TIE or self.state == Actions.UNKNOWN:
-            #   define the main board state object
-            self.board = np.zeros( (self.rows, self.cols), dtype=np.int8 )
-
-            self.undo_counts = [0, 0]
-
-            self.origin = Originator()
-            self.caretaker = CareTaker(self.origin)
-
-            self.origin.set_state(self.board)
-            self.caretaker.do()
-
-            self.client_socket.send(bytes(str(Actions.RESET.value), 'utf8'))
-
-        if self.state == Actions.WIN or self.state == Actions.TIE:
-            self.logger.debug('reset button pressed')
-            self.state = Actions.READY
-
-        if self.state == Actions.UNKNOWN:
-            self.state = Actions.PRE_GAME
-
-
     def get_turn_color(self) -> None:
         '''
         Returns the color to use based on the current player.
@@ -133,6 +102,29 @@ class ClientGUI:
         return 'black'
 
     
+    def get_next_color(self, my_color: str, other_color: str) -> None:
+        '''
+        Get the next available color from the color list based on the current player and opponent colors.
+
+            Parameters:
+                my_color (str):     The color of the current player.
+                other_color (str):  The color of the opponent.
+            
+            Returns:
+                color (str):        The next color that can be used.
+        '''
+        #   get list of all colors but the opponent
+        available_colors = [ c for c in player_colors_list if c != other_color ]
+        #   get current color based on the new list
+        index = available_colors.index(my_color)
+        #   iterate over the colors until find an unused one
+        while my_color == available_colors[index]:
+            index += 1
+            if index >= len(available_colors):
+                index = 0
+        return available_colors[index]
+
+    
     def calc_col_by_mouse(self, x_cord: int) -> int:
         '''
         Calculate the column index based on the position of the mouse on the board.
@@ -144,22 +136,6 @@ class ClientGUI:
                 column (int): The index of the column in the board.
         '''
         return int(math.floor(x_cord / self.square_size))
-
-
-    def create_socket(self) -> None:
-        '''
-        Creates the client's socket.
-        '''
-        self.client_socket = socket.socket()
-        self.port = 1234
-        self.host = '127.0.0.1'
-
-        try:
-            self.client_socket.connect( (self.host, self.port) )
-        except Exception as e:
-            self.logger.error(str(e))
-            self.client_socket.close()
-        self.logger.info('created conn {}:{}'.format(self.host, self.port))
 
 
     def calc_window_size(self) -> None:
@@ -194,6 +170,39 @@ class ClientGUI:
         
         self.logger.debug('window size (width={}, height={}), radius={}, square_size={}, font_size={}'.format(self.width, self.height, self.radius, self.square_size, self.font_size))
 
+
+    def create_socket(self) -> None:
+        '''
+        Creates the client's socket.
+        '''
+        self.client_socket = socket.socket()
+        self.port = 1234
+        self.host = '127.0.0.1'
+
+        try:
+            self.client_socket.connect( (self.host, self.port) )
+        except Exception as e:
+            self.logger.error(str(e))
+            self.client_socket.close()
+        self.logger.info('created conn {}:{}'.format(self.host, self.port))
+
+
+    def exit(self, should_send: bool = False) -> None:
+        '''
+        Teardown function to close the socket and the gui.
+
+            Parameters:
+                should_send (bool): Whether to send an exit event to the server or not, default False.
+        '''
+        if should_send:
+            self.client_socket.send(bytes(str(Actions.EXIT.value), 'utf8'))
+            self.logger.debug('send exit event to server')
+        host, port = self.client_socket.getsockname()
+        self.client_socket.close()
+        self.logger.info('conn closed {}:{}'.format(host, port))
+        pygame.quit()
+        sys.exit()
+
     
     def create_gui(self) -> None:
         '''
@@ -206,8 +215,8 @@ class ClientGUI:
         pygame.init()   # initiate the pyGame module
         pygame.mouse.set_cursor(pygame.cursors.tri_left)
 
-        #   create the main display with black background
-        self.main_display = pygame.display.set_mode((self.width, self.height), 0, 32)
+        #   create the main display with black background, pygame.SHOWN flags is used as a topmost
+        self.main_display = pygame.display.set_mode((self.width, self.height), pygame.SHOWN)
         self.main_display.fill(utils.get_color('black'))
 
         self.font_style = pygame.font.match_font('segoeuisymbol')
@@ -219,10 +228,6 @@ class ClientGUI:
 
         pygame.display.update()
         pygame.display.set_caption('Client {}'.format(self.id))
-
-        #   pyGame module does not support topmost attribute as Tkinter does
-        #   in the following the -1 variable used as topmost
-        SetWindowPos(pygame.display.get_wm_info()['window'], -1, 0, 0, 0, 0, 1)
 
         #   draw the board itself and the top bar
         self.draw_board()
@@ -259,19 +264,6 @@ class ClientGUI:
 
         pygame.display.update()
         self.logger.debug('board=\n{}'.format(self.board))
-
-
-    def clear_top(self, all=True) -> None:
-        '''
-        Clears the top row above the main board with a black rectangle.
-
-            Parameters:
-                all (bool): Whether to clear the entire top row or just the part when the circle is moving.
-        '''
-        num_rows = self.options_rows if all else 1
-        y = 0 if all else self.square_size * (self.options_rows - 1)
-        pygame.draw.rect(self.main_display, utils.get_color('black'), (0, y, self.width, self.square_size * num_rows))
-        self.draw_scores()
 
 
     def draw_text_top(self, txt: str) -> None:
@@ -319,25 +311,125 @@ class ClientGUI:
         self.main_display.blit(text_2, text_rect_2)
         self.main_display.blit(text_c, text_rect_c)
 
-
-    def exit(self, should_send: bool = False) -> None:
+    
+    def draw_main_menu(self) -> None:
         '''
-        Teardown function to close the socket and the gui.
+        Draws a menu where each player can choose its color and who will play first.
+        '''
+        #   define the span in each axis
+        x_num_squares = 4
+        y_num_squares = 3
+
+        #   calculates the X and Y coordinates based on the size of the rectangles of the board
+        x = ((self.cols / 2) - x_num_squares / 2) * self.square_size
+        y = (((self.rows / 2) - y_num_squares / 2) * self.square_size) + self.square_size * self.options_rows
+
+        #   draw the main rectangle of the menu
+        self.main_menu = pygame.draw.rect(
+            self.main_display,
+            utils.get_color('gray'),
+            (
+                x,
+                y,
+                self.square_size * x_num_squares,
+                self.square_size * y_num_squares
+            )
+        )
+
+        row_offset = 20
+        
+        #   draw player 1 title
+        self.font.set_bold(self.turn == 1)
+        text = self.font.render('{} Player 1:'.format('🠖' if self.turn == 1 else '    '), True , utils.get_color('black'))
+        self.player1_text = text.get_rect()
+        self.player1_text.midleft = (x, y + row_offset * 2)
+        self.main_display.blit(text, self.player1_text)
+
+        #   draw player 2 title
+        self.font.set_bold(self.turn == 2)
+        text = self.font.render('{} Player 2:'.format('🠖' if self.turn == 2 else '    '), True , utils.get_color('black'))
+        self.player2_text = text.get_rect()
+        self.player2_text.midleft = (x, y + row_offset * 4)
+        self.main_display.blit(text, self.player2_text)
+
+        #   draw players colors
+        right_most = max(self.player1_text.right, self.player2_text.right)
+
+        self.player1_circle = self.draw_circle(self.player1_color, (right_most + 40, y + row_offset * 2), radius=self.radius // 2)
+        self.player2_circle = self.draw_circle(self.player2_color, (right_most + 40, y + row_offset * 4), radius=self.radius // 2)
+
+        #   define and draw start button
+        if not self.start_button:
+            x_num_squares = 3
+            y_num_squares = 0.75
+
+            x = ((self.cols / 2) - x_num_squares / 2) * self.square_size
+            width = self.square_size * x_num_squares
+            height = self.square_size * y_num_squares
+            y = self.main_menu.bottom - height - 20
+
+            self.start_button = Button(position=(x, y), size=(width, height), btn_color='blue', callback=self.handle_start, is_active=True, text='Start Game', txt_color='black', font=self.font)
+
+        self.start_button.draw(self.main_display)
+        
+        
+    def draw_circle(self, color: str, center: utils.Couple, radius: Optional[int] = None):
+        '''
+        Draw a single circle on the screen and returns it.
 
             Parameters:
-                should_send (bool): Whether to send an exit event to the server or not, default False.
+                color (str):    The name of the color to use.
+                center (list):  The X and Y coordinates of the center of the circle.
+                radius (int):   The radius to use, default None will use the default radius.
+
+            Returns:
+                circle (pygame.Rect): The rectangle boundaries of the circle that was drawn.
         '''
-        if should_send:
-            self.client_socket.send(bytes(str(Actions.EXIT.value), 'utf8'))
-            self.logger.debug('send exit event to server')
-        host, port = self.client_socket.getsockname()
-        self.client_socket.close()
-        self.logger.info('conn closed {}:{}'.format(host, port))
-        pygame.quit()
-        sys.exit()
+        if not isinstance(center, (tuple, list)):
+            return
+
+        if not radius:
+            radius = self.radius
+
+        color_rgb = utils.get_color(color)
+        circle = pygame.draw.circle(self.main_display, color_rgb, center, radius)
+
+        pygame.draw.circle(self.main_display, utils.get_color('black'), center, radius, 1)
+
+        return circle
 
 
-    def game_over_gui(self, is_win: bool = True) -> None:
+    def draw_moving_piece(self, mouse_x: int) -> None:
+        '''
+        Drawing the moving piece on top of the board.
+
+            Parameters:
+                mouse_x (int): The X coordinate of the mouse.
+        '''
+        self.clear_top(all=False)
+        #   get the column index of the mouse
+        col = self.calc_col_by_mouse(mouse_x)
+        #   select the user color or an invalid location color based on the board state
+        color_to_use = self.get_turn_color() if utils.is_valid_location(col, self.board) else 'gray'
+        # calculate the x axis of the circle and draw
+        circle_x = col * self.square_size + self.square_size / 2
+        self.draw_circle(color_to_use, (circle_x, int(self.square_size * self.options_rows - self.radius)))
+
+
+    def clear_top(self, all=True) -> None:
+        '''
+        Clears the top row above the main board with a black rectangle.
+
+            Parameters:
+                all (bool): Whether to clear the entire top row or just the part when the circle is moving.
+        '''
+        num_rows = self.options_rows if all else 1
+        y = 0 if all else self.square_size * (self.options_rows - 1)
+        pygame.draw.rect(self.main_display, utils.get_color('black'), (0, y, self.width, self.square_size * num_rows))
+        self.draw_scores()
+
+
+    def draw_game_over(self, is_win: bool = True) -> None:
         '''
         Add a title to the top of the screen based on the winner, or tie, and draw the reset button.
 
@@ -408,60 +500,33 @@ class ClientGUI:
                                     text='Reset', txt_color='black', font=self.font)
 
 
-    def draw_main_menu(self) -> None:
+    def handle_reset(self) -> bool:
         '''
-        Draws a menu where each player can choose its color and who will play first.
+        Reset the state of the game.
+         
+            Parameters:
+                event (pygame.event): The event that occurred, default None.
         '''
-        #   define the span in each axis
-        x_num_squares = 4
-        y_num_squares = 3
+        if self.state == Actions.WIN or self.state == Actions.TIE or self.state == Actions.UNKNOWN:
+            #   define the main board state object
+            self.board = np.zeros( (self.rows, self.cols), dtype=np.int8 )
 
-        #   calculates the X and Y coordinates based on the size of the rectangles of the board
-        x = ((self.cols / 2) - x_num_squares / 2) * self.square_size
-        y = (((self.rows / 2) - y_num_squares / 2) * self.square_size) + self.square_size * self.options_rows
+            self.undo_counts = [0, 0]
 
-        self.main_menu = pygame.draw.rect(
-            self.main_display,
-            utils.get_color('gray'),
-            (
-                x,
-                y,
-                self.square_size * x_num_squares,
-                self.square_size * y_num_squares
-            )
-        )
+            self.origin = Originator()
+            self.caretaker = CareTaker(self.origin)
 
-        row_offset = 20
-        
-        self.font.set_bold(self.turn == 1)
-        text = self.font.render('{} Player 1:'.format('🠖' if self.turn == 1 else '    '), True , utils.get_color('black'))
-        self.player1_text = text.get_rect()
-        self.player1_text.midleft = (x, y + row_offset * 2)
-        self.main_display.blit(text, self.player1_text)
+            self.origin.set_state(self.board)
+            self.caretaker.do()
 
-        self.font.set_bold(self.turn == 2)
-        text = self.font.render('{} Player 2:'.format('🠖' if self.turn == 2 else '    '), True , utils.get_color('black'))
-        self.player2_text = text.get_rect()
-        self.player2_text.midleft = (x, y + row_offset * 4)
-        self.main_display.blit(text, self.player2_text)
+            self.client_socket.send(bytes(str(Actions.RESET.value), 'utf8'))
 
-        right_most = max(self.player1_text.right, self.player2_text.right)
+        if self.state == Actions.WIN or self.state == Actions.TIE:
+            self.logger.debug('reset button pressed')
+            self.state = Actions.READY
 
-        self.player1_circle = self.draw_circle(self.player1_color, (right_most + 40, y + row_offset * 2), radius=self.radius // 2)
-        self.player2_circle = self.draw_circle(self.player2_color, (right_most + 40, y + row_offset * 4), radius=self.radius // 2)
-
-        if not self.start_button:
-            x_num_squares = 3
-            y_num_squares = 0.75
-
-            x = ((self.cols / 2) - x_num_squares / 2) * self.square_size
-            width = self.square_size * x_num_squares
-            height = self.square_size * y_num_squares
-            y = self.main_menu.bottom - height - 20
-
-            self.start_button = Button(position=(x, y), size=(width, height), btn_color='blue', callback=self.handle_start, is_active=True, text='Start Game', txt_color='black', font=self.font)
-
-        self.start_button.draw(self.main_display)
+        if self.state == Actions.UNKNOWN:
+            self.state = Actions.PRE_GAME
 
 
     def handle_start(self) -> None:
@@ -503,55 +568,6 @@ class ClientGUI:
         
         return False
 
-            
-    def get_next_color(self, my_color: str, other_color: str) -> None:
-        '''
-        Get the next available color from the color list based on the current player and opponent colors.
-
-            Parameters:
-                my_color (str):     The color of the current player.
-                other_color (str):  The color of the opponent.
-            
-            Returns:
-                color (str):        The next color that can be used.
-        '''
-        #   get list of all colors but the opponent
-        available_colors = [ c for c in player_colors_list if c != other_color ]
-        #   get current color based on the new list
-        index = available_colors.index(my_color)
-        #   iterate over the colors until find an unused one
-        while my_color == available_colors[index]:
-            index += 1
-            if index >= len(available_colors):
-                index = 0
-        return available_colors[index]
-        
-        
-    def draw_circle(self, color: str, center: utils.Couple, radius: Optional[int] = None):
-        '''
-        Draw a single circle on the screen and returns it.
-
-            Parameters:
-                color (str):    The name of the color to use.
-                center (list):  The X and Y coordinates of the center of the circle.
-                radius (int):   The radius to use, default None will use the default radius.
-
-            Returns:
-                circle (pygame.Rect): The rectangle boundaries of the circle that was drawn.
-        '''
-        if not isinstance(center, (tuple, list)):
-            return
-
-        if not radius:
-            radius = self.radius
-
-        color_rgb = utils.get_color(color)
-        circle = pygame.draw.circle(self.main_display, color_rgb, center, radius)
-
-        pygame.draw.circle(self.main_display, utils.get_color('black'), center, radius, 1)
-
-        return circle
-
 
     def handle_undo(self) -> None:
         '''
@@ -576,23 +592,6 @@ class ClientGUI:
         self.turn = 1 if self.turn == 2 else 2
 
 
-    def draw_moving_piece(self, mouse_x: int) -> None:
-        '''
-        Drawing the moving piece on top of the board.
-
-            Parameters:
-                mouse_x (int): The X coordinate of the mouse.
-        '''
-        self.clear_top(all=False)
-        #   get the column index of the mouse
-        col = self.calc_col_by_mouse(mouse_x)
-        #   select the user color or an invalid location color based on the board state
-        color_to_use = self.get_turn_color() if utils.is_valid_location(col, self.board) else 'gray'
-        # calculate the x axis of the circle and draw
-        circle_x = col * self.square_size + self.square_size / 2
-        self.draw_circle(color_to_use, (circle_x, int(self.square_size * self.options_rows - self.radius)))
-
-
     def run_game(self) -> None:
         '''
         The main function to communicate with the server and maintain the state of the game.
@@ -602,7 +601,6 @@ class ClientGUI:
         time.sleep(1)
 
         should_draw_board = False
-        should_draw_undo = False
         self.reset_button.set_active(False)
         self.undo_button.set_active(False)
 
@@ -683,7 +681,7 @@ class ClientGUI:
                                 self.logger.debug('got exit event from server')
                                 self.exit()             
                             elif Actions.WIN.is_equals(action) or Actions.TIE.is_equals(action):
-                                self.game_over_gui(is_win=Actions.WIN.is_equals(action))
+                                self.draw_game_over(is_win=Actions.WIN.is_equals(action))
                             elif Actions.CONTINUE.is_equals(action):
                                 self.change_turn()
                                 self.logger.debug('current turn({})'.format(self.turn))
