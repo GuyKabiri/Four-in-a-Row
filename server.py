@@ -138,12 +138,15 @@ class ServerGUI(tk.Tk):
         close the server's socket and teardown the gui.
         '''
         for conn in self.clients:
-            host, port = conn.getpeername()
-            self.logger.debug('closing {}:{}'.format(host, port))
-            # send an exit to the client, so it will close its conn
-            conn.send(bytes(str(Actions.EXIT.value), 'utf8'))
-            conn.close()
-            self.logger.debug('conn {}:{} closed'.format(host, port))
+            try:
+                host, port = conn.getpeername()
+                self.logger.debug('closing {}:{}'.format(host, port))
+                # send an exit to the client, so it will close its conn
+                conn.send(bytes(str(Actions.EXIT.value), 'utf8'))
+                conn.close()
+                self.logger.debug('conn {}:{} closed'.format(host, port))
+            except Exception as e:
+                self.logger.debug('conn allready closed')
         
         self.logger.info('closing server conn')
         self.server_socket.close()
