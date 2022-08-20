@@ -4,7 +4,7 @@ import utils
 
 class Button:
 
-    def __init__(self, position: utils.Couple, size: utils.Couple, text: str, btn_color: str, txt_color: str, font: pygame.font, callback: Callable = None) -> None:
+    def __init__(self, position: utils.Couple, size: utils.Couple, text: str, btn_color: str, txt_color: str, font: pygame.font, is_active: bool = True, callback: Callable = None) -> None:
         '''
         Create a new button.
 
@@ -15,6 +15,7 @@ class Button:
                 btn_color (str):        The color name of the button.
                 txt_color (str):        The color name of the text.
                 font (pygame.font):     Font to draw the text.
+                is_active (bool):       Whether the button is active or not.
                 callback (Callable):    A callback function to run.
         '''
         if not isinstance(position, (list, tuple)) or not isinstance(size, (list, tuple)):
@@ -29,15 +30,26 @@ class Button:
         self.button_color = btn_color
         self.text_color = txt_color
         self.font = font
+        self.is_active = is_active
 
-        self.bold = False
+        self.collide = False
         self.rect = None
 
         self.callback = callback
     
 
     def draw(self, surf):
-        self.font.set_bold(self.bold)
+        '''
+        Draw the button on top of the surface.
+
+            Parameters:
+                surf: (pygame.Surface): The surface to draw on.
+        '''
+        if not self.is_active:
+            return
+
+        #   if mouse collide with the button, set the text to bold
+        self.font.set_bold(self.collide)
         text = self.font.render(self.text, True, utils.get_color(self.text_color), None)
 
         position_and_size = (
@@ -67,16 +79,43 @@ class Button:
 
     
     def handle_event(self, event):
-        if not self.rect:
+        '''
+        Hnadle a pyGame event, change text and cursor if the mouse is in the button boundaries and return True if the button was pressed.
+
+            Parameters:
+                event (pygame.event): A pyGame event to handle.
+
+            Returns:
+                is_clicked (bool): True if the button was clicked, False if not.
+        '''
+        #   if button is not defined or set to inactive
+        if not self.rect or not self.is_active:
             return False
 
-        if event.type == pygame.MOUSEMOTION:
-            self.bold = self.rect.collidepoint(event.pos)
+        #   if it's a mouse event, check if it's in the button boundaries
+        if event.type == pygame.MOUSEMOTION or event.type == pygame.MOUSEBUTTONUP:
+            self.collide = self.rect.collidepoint(event.pos)
+        else:
+            self.collide = False
 
-        elif event.type == pygame.MOUSEBUTTONUP:
-            if self.rect.collidepoint(event.pos):
+        #   if mouse in boundaries, draw a different cursor and check if mouse was clicked
+        if self.collide:
+            pygame.mouse.set_cursor(pygame.cursors.broken_x)
+            if event.type == pygame.MOUSEBUTTONUP:
                 self.callback()
-                return True
+                pygame.mouse.set_cursor(pygame.cursors.tri_left)
+                return True 
+        else:
+            pygame.mouse.set_cursor(pygame.cursors.tri_left)
 
         return False
         
+
+    def set_active(self, active):
+        '''
+        Change the active state of the button.
+
+            Parameters:
+                active (bool): True to set it active and False to set it as inactive.
+        '''
+        self.is_active = active
