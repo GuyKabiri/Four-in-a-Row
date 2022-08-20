@@ -119,3 +119,5 @@ class Button:
                 active (bool): True to set it active and False to set it as inactive.
         '''
         self.is_active = active
+        if not active:
+            self.collide = False

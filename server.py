@@ -142,6 +142,7 @@ class ServerGUI(tk.Tk):
             self.logger.debug('closing {}:{}'.format(host, port))
             # send an exit to the client, so it will close its conn
             conn.send(bytes(str(Actions.EXIT.value), 'utf8'))
+            conn.close()
             self.logger.debug('conn {}:{} closed'.format(host, port))
         
         self.logger.info('closing server conn')
@@ -269,6 +270,15 @@ class ServerGUI(tk.Tk):
             else:
                 self.logger.debug('send continue to Client({})'.format(client_id))
                 conn.send(bytes(str(Actions.CONTINUE.value), 'utf8'))
+
+        try:
+            host, port = conn.getpeername()
+            self.logger.debug('closing {}:{}'.format(host, port))
+            conn.close()
+            self.clients.remove(conn)
+            self.logger.debug('conn {}:{} closed'.format(host, port))
+        except Exception as e:
+            self.logger.debug('conn has already been closed')
 
 
 

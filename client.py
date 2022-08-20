@@ -636,6 +636,8 @@ class ClientGUI:
                 if self.state == Actions.WIN or self.state == Actions.TIE:
                     if self.reset_button.handle_event(event):
                         should_draw_board = True
+                        self.clear_top()
+                        self.reset_button.set_active(False)
                         continue
 
                 #   if a mouse click event
@@ -696,10 +698,11 @@ class ClientGUI:
                 self.draw_board()
                 should_draw_board = False
             
-            self.undo_button.draw(self.main_display)
-
             if self.state == Actions.WIN or self.state == Actions.TIE:
-                self.reset_button.draw(self.main_display)                    
+                self.reset_button.set_active(True)
+
+            self.undo_button.draw(self.main_display)
+            self.reset_button.draw(self.main_display)                    
                 
             # update the main display
             pygame.display.update()
