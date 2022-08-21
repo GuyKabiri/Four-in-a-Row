@@ -2,11 +2,13 @@ import pygame
 from typing import *
 import utils
 
+
 class Button:
 
-    def __init__(self, position: utils.Couple, size: utils.Couple, btn_color: str, callback: Callable = None, is_active: bool = True,
-        img_path: Optional[str] = '', text: Optional[str] = '', txt_color: Optional[str] = 'black', font: Optional[pygame.font.Font] = None) -> None:
-        '''
+    def __init__(self, position: utils.Couple, size: utils.Couple, btn_color: str, callback: Callable = None,
+                 is_active: bool = True, img_path: Optional[str] = '', text: Optional[str] = '',
+                 txt_color: Optional[str] = 'black', font: Optional[pygame.font.Font] = None) -> None:
+        """
         Create a new button.
 
             Parameters:
@@ -19,7 +21,7 @@ class Button:
                 text (str):             Text of the button, default empty string.
                 txt_color (str):        The color name of the text, default black.
                 font (pygame.font):     Font to draw the text, default None.
-        '''
+        """
         if not isinstance(position, (list, tuple)) or not isinstance(size, (list, tuple)):
             return
 
@@ -44,15 +46,14 @@ class Button:
         self.rect = None
 
         self.callback = callback
-    
 
-    def draw(self, surf):
-        '''
+    def draw(self, surf: pygame.Surface) -> None:
+        """
         Draw the button on top of the surface.
 
             Parameters:
                 surf: (pygame.Surface): The surface to draw on.
-        '''
+        """
         if not self.is_active:
             return
 
@@ -86,23 +87,23 @@ class Button:
             text_rect = text.get_rect()
             text_rect.center = self.rect.center
             surf.blit(text, text_rect)
-        
+
         if self.image:
             image_rect = self.image.get_rect()
             image_rect.center = self.rect.center
             surf.blit(self.image, image_rect)
 
-    
-    def handle_event(self, event):
-        '''
-        Hnadle a pyGame event, change text and cursor if the mouse is in the button boundaries and return True if the button was pressed.
+    def handle_event(self, event: pygame.event) -> bool:
+        """
+        Handle a pyGame event, change text and cursor if the mouse is in the button boundaries and return True if the
+        button was pressed.
 
             Parameters:
-                event (pygame.event): A pyGame event to handle.
+                event (pygame.Event): A pyGame event to handle.
 
             Returns:
                 is_clicked (bool): True if the button was clicked, False if not.
-        '''
+        """
         #   if button is not defined or set to inactive
         if not self.rect or not self.is_active:
             return False
@@ -119,20 +120,19 @@ class Button:
             if event.type == pygame.MOUSEBUTTONUP:
                 self.callback()
                 pygame.mouse.set_cursor(pygame.cursors.tri_left)
-                return True 
+                return True
         else:
             pygame.mouse.set_cursor(pygame.cursors.tri_left)
 
         return False
-        
 
-    def set_active(self, active):
-        '''
+    def set_active(self, active: bool) -> None:
+        """
         Change the active state of the button.
 
             Parameters:
                 active (bool): True to set it active and False to set it as inactive.
-        '''
+        """
         self.is_active = active
         if not active:
             self.collide = False

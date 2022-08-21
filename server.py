@@ -1,42 +1,55 @@
-import os
+import argparse
+import logging
+import multiprocessing
+import socket
+import threading
+import time
 import tkinter as tk
 from tkinter.font import Font
-import threading, multiprocessing, threading
-from _thread import *
-import socket
+
 import numpy as np
-from typing import *
-from client import ClientGUI
-from actions import Actions
+
 import utils
-import logging
-import argparse
-import multiprocessing
-import time
+from actions import Actions
+from client import ClientGUI
 from memento import Originator, CareTaker
 
-# end of imports
 
+# end of imports
 
 
 class ServerGUI(tk.Tk):
     HEIGHT, WIDTH = 300, 200
 
     def __init__(self) -> None:
-        '''
+        """
         Create a new server, define it's gui and create a server socket.
-        '''
+        """
         super().__init__()
 
         parser = argparse.ArgumentParser()
-        parser.add_argument('--log_level', default='info', type=str, choices=['info', 'debug', 'warning', 'error', 'critical'])
+        parser.add_argument('--log_level', default='info', type=str,
+                            choices=['info', 'debug', 'warning', 'error', 'critical'])
         args = vars(parser.parse_args())
-        
+
         self.log_level = getattr(logging, args['log_level'].upper())
         self.n = 4
 
-        self.queue = multiprocessing.Queue(-1)  #   -1=unlimited
-        self.logger_listener = multiprocessing.Process(target=utils.logger_listener, args=(self.queue, self.log_level, ))
+        self.n_frame = None
+        self.n_value = None
+        self.spin_frame = None
+        self.rowsBox = None
+        self.colsBox = None
+        self.start_game_button = None
+        self.server_socket = None
+        self.host = ''
+        self.port = 0
+
+        self.origin = None
+        self.caretaker = None
+
+        self.queue = multiprocessing.Queue(-1)  # -1=unlimited
+        self.logger_listener = multiprocessing.Process(target=utils.logger_listener, args=(self.queue, self.log_level,))
         self.logger_listener.start()
 
         utils.root_logger_configurer(self.queue, self.log_level)
@@ -50,11 +63,10 @@ class ServerGUI(tk.Tk):
 
         self.create_server_socket()
 
-
     def create_server_gui(self) -> None:
-        '''
+        """
         Generate the server gui.
-        '''
+        """
         #   define server's gui window
         self.title('Four in a Row Server')
         self.iconphoto(False, tk.PhotoImage(file='assets/icon.png'))
@@ -68,48 +80,56 @@ class ServerGUI(tk.Tk):
         #   define n-in-a-row frame
         self.n_frame = tk.Frame(self)
         n = tk.StringVar(value='4')
-        self.n_value = tk.Spinbox(self.n_frame, textvariable=n, from_=4, to=6, width=2, font=Font(family='Helvetica', size=20, weight='bold'), state='readonly', command=self.validate_n)
+        self.n_value = tk.Spinbox(self.n_frame, textvariable=n, from_=4, to=6, width=2,
+                                  font=Font(family='Helvetica', size=20, weight='bold'), state='readonly',
+                                  command=self.validate_n)
         self.n_value.grid(row=0, column=0)
-        tk.Label(self.n_frame, text=" in a row", font=Font(family='Helvetica', size=20, weight='bold')).grid(row=0, column=1)
+        tk.Label(self.n_frame, text=" in a row", font=Font(family='Helvetica', size=20, weight='bold')).grid(row=0,
+                                                                                                             column=1)
         self.n_frame.pack()
 
-        #   define rows and cols spinboxes
+        #   define rows and cols spin boxes
         self.spin_frame = tk.Frame(self)
         rows = tk.StringVar(value='8')
         cols = tk.StringVar(value='8')
-        self.rowsBox = tk.Spinbox(self.spin_frame, textvariable=rows, from_=5, to=10, width=2, font=Font(family='Helvetica', size=20, weight='bold'), state='readonly', command=self.validate_n)
-        self.colsBox = tk.Spinbox(self.spin_frame, textvariable=cols, from_=5, to=10, width=2, font=Font(family='Helvetica', size=20, weight='bold'), state='readonly', command=self.validate_n)
-        self.rowsBox.grid(row=0, column=0, sticky=tk.W,)
-        self.colsBox.grid(row=0, column=2, sticky=tk.W,)
-        tk.Label(self.spin_frame, text=" X ", font=Font(family='Helvetica', size=20, weight='bold')).grid(row=0, column=1)
+        self.rowsBox = tk.Spinbox(self.spin_frame, textvariable=rows, from_=5, to=10, width=2,
+                                  font=Font(family='Helvetica', size=20, weight='bold'), state='readonly',
+                                  command=self.validate_n)
+        self.colsBox = tk.Spinbox(self.spin_frame, textvariable=cols, from_=5, to=10, width=2,
+                                  font=Font(family='Helvetica', size=20, weight='bold'), state='readonly',
+                                  command=self.validate_n)
+        self.rowsBox.grid(row=0, column=0, sticky=tk.W, )
+        self.colsBox.grid(row=0, column=2, sticky=tk.W, )
+        tk.Label(self.spin_frame, text=" X ", font=Font(family='Helvetica', size=20, weight='bold')).grid(row=0,
+                                                                                                          column=1)
         self.spin_frame.pack()
 
         #   define start button
-        self.generate_game_button = tk.Button(self, text='Start Play', font=Font(family='Helvetica', size=18, weight='bold'), command=self.create_game)
-        self.generate_game_button.pack()
-        
+        self.start_game_button = tk.Button(self, text='Start Play',
+                                           font=Font(family='Helvetica', size=18, weight='bold'),
+                                           command=self.create_game)
+        self.start_game_button.pack()
+
         self.attributes("-topmost", True)
 
-    
     def validate_n(self):
-        '''
+        """
         Callback function which validates the selected n value with the selected rows or columns.
         And disabled the start game button if illegal values selected.
-        '''
+        """
         n_val = int(self.n_value.get())
         rows, cols = int(self.rowsBox.get()), int(self.colsBox.get())
 
         if n_val > cols and n_val > rows:
-            self.generate_game_button['state'] = tk.DISABLED
+            self.start_game_button['state'] = tk.DISABLED
         else:
-            self.generate_game_button['state'] = tk.ACTIVE
-
+            self.start_game_button['state'] = tk.ACTIVE
 
     def create_game(self) -> None:
-        '''
+        """
         Callback function for the start game button.
         Reads the number of rows and columns, create a new client gui and open a socket.
-        '''
+        """
         rows, cols = int(self.rowsBox.get()), int(self.colsBox.get())
         n = int(self.n_value.get())
         if n > cols and n > rows:
@@ -117,26 +137,26 @@ class ServerGUI(tk.Tk):
 
         self.client_id += 1
         #   creates new process to start the client's gui on
-        client_process = multiprocessing.Process(target=ClientGUI, args=(self.client_id, self.queue, self.log_level, (rows, cols)))
+        client_process = multiprocessing.Process(target=ClientGUI,
+                                                 args=(self.client_id, self.queue, self.log_level, (rows, cols)))
         client_process.start()
         self.logger.info('created Client({}) with board size (rows={}, cols={})'.format(self.client_id, rows, cols))
 
         client, address = self.server_socket.accept()
 
         #   creates new thread to maintain the client's state
-        thread = threading.Thread(target=self.run_client, daemon=True, args=(client, self.client_id, (rows, cols), n, ))
+        thread = threading.Thread(target=self.run_client, daemon=True, args=(client, self.client_id, (rows, cols), n,))
         thread.start()
 
         self.clients.append(client)
         self.logger.info('connected to={}:{}'.format(address[0], str(address[1])))
 
-    
     def close_all(self) -> None:
-        '''
+        """
         Callback function for server exit event.
         Sends an exit event to all clients to close their sockets,
         close the server's socket and teardown the gui.
-        '''
+        """
         for conn in self.clients:
             try:
                 host, port = conn.getpeername()
@@ -147,7 +167,7 @@ class ServerGUI(tk.Tk):
                 self.logger.debug('conn {}:{} closed'.format(host, port))
             except Exception as e:
                 self.logger.debug('conn allready closed')
-        
+
         self.logger.info('closing server conn')
         self.server_socket.close()
 
@@ -157,17 +177,16 @@ class ServerGUI(tk.Tk):
 
         self.destroy()
 
-
     def create_server_socket(self) -> None:
-        '''
+        """
         Creates the server socket.
-        '''
+        """
         self.server_socket = socket.socket()
         self.host = '127.0.0.1'
         self.port = 1234
-        
+
         try:
-            self.server_socket.bind( (self.host, self.port) )
+            self.server_socket.bind((self.host, self.port))
             self.server_socket.listen()
         except Exception as e:
             self.server_socket.close()
@@ -175,33 +194,31 @@ class ServerGUI(tk.Tk):
         host, port = self.server_socket.getsockname()
         self.logger.info('socket created {}:{}'.format(host, port))
 
-
     def reset_game(self, size: utils.Couple):
-        '''
+        """
         Reset the game board and states.
 
-            Parametes:
+            Parameters:
                 size (tuple):       The size of the board.
-        '''
-        self.state = np.zeros( size, dtype=np.int8 )
+        """
+        self.state = np.zeros(size, dtype=np.int8)
 
         self.origin = Originator()
-        self.caretacker = CareTaker(self.origin)
+        self.caretaker = CareTaker(self.origin)
 
         self.origin.set_state(self.state)
-        self.caretacker.do()
+        self.caretaker.do()
 
-
-    def run_client(self, conn: socket, client_id: int, size: utils.Couple, n: int) -> None:
-        '''
+    def run_client(self, conn: socket.socket, client_id: int, size: utils.Couple, n: int) -> None:
+        """
         Maintains the client's state, receive steps and send responses.
 
             Parameters:
                 conn (socket):      The socket to communicate with the client.
                 client_id (int):    The ID of the client.
                 size (tuple):       The size of the board.
-                n (int):            Value for n-in-a-row.    
-        '''
+                n (int):            Value for n-in-a-row.
+        """
 
         self.reset_game(size)
 
@@ -227,13 +244,13 @@ class ServerGUI(tk.Tk):
                 self.logger.info('received reset event from Client({})'.format(client_id))
                 self.reset_game(size)
                 continue
-            
+
             elif action1 and Actions.UNDO.is_equals(action1):
                 self.logger.info('received undo event from Client({})'.format(client_id))
-                if self.caretacker.undo():
+                if self.caretaker.undo():
                     self.state = self.origin.get_state()
                 continue
-            
+
             #   receive the step from the client
             action2 = utils.wait_for_data(conn)
 
@@ -242,7 +259,7 @@ class ServerGUI(tk.Tk):
                 break
 
             player, column = int(action1), int(action2)
-            
+
             self.logger.info('Client({}) got column={} from player={}'.format(client_id, column, player))
 
             #   validate the step, if illegal, send event to notify the client
@@ -252,14 +269,14 @@ class ServerGUI(tk.Tk):
                 continue
 
             self.logger.debug('legal location')
-            
+
             #   add the piece in the requested place and send event to update the client
             self.state = utils.add_piece(self.state, column, player)
             conn.send(bytes(str(Actions.ADD_PIECE.value), 'utf8'))
             self.logger.debug('piece added')
 
             self.origin.set_state(self.state)
-            self.caretacker.do()
+            self.caretaker.do()
 
             #   if the user that added the piece won, send win event
             if utils.is_won(self.state, player, n):
@@ -282,8 +299,6 @@ class ServerGUI(tk.Tk):
             self.logger.debug('conn {}:{} closed'.format(host, port))
         except Exception as e:
             self.logger.debug('conn has already been closed')
-
-
 
 
 if __name__ == '__main__':
