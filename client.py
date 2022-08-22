@@ -1,9 +1,12 @@
+from operator import truediv
 import os
+from pickle import FALSE
 import time
 import multiprocessing
 import logging
 import sys
 import math
+from turtle import left, xcor
 import utils
 import socket
 
@@ -46,7 +49,7 @@ def get_next_color(my_color: str, other_color: str) -> str:
 class ClientGUI:
 
     def __init__(self, client_id: int, queue: multiprocessing.Queue, log_level: int,
-                 size: utils.Couple = (6, 10)) -> None:
+                 size: utils.Couple = (6, 10), n: int = 4, max_undo: int = 3) -> None:
         """
         Create a new client, define it's gui, board, and create a socket.
 
@@ -55,9 +58,12 @@ class ClientGUI:
                 queue (multiprocessing.Queue):  The queue to push the logs in.
                 log_level (int):                The log level to use.
                 size (tuple):                   Size of board to use.
+                n (int):                        Value for n-in-a-row.
+                max_undo (int):                 Maximum allowed undo per player.
         """
         self.square_size = 80
-        self.options_rows = 2
+        self.options_rows = 3
+        self.bottom_rows = 1
         self.width = 0
         self.height = 0
         self.radius = 0
@@ -81,6 +87,7 @@ class ClientGUI:
         self.caretaker = None
 
         self.id = client_id
+        self.n = n
 
         #   if given size is not a tuple, a list or have not 2 dims
         if not (isinstance(size, tuple) or isinstance(size, list)) or len(size) != 2:
@@ -94,9 +101,9 @@ class ClientGUI:
         utils.root_logger_configurer(self.queue, log_level)
         self.logger = logging.getLogger('Client({})'.format(self.id))
 
+        self.max_undo = max_undo
         self.undo_counts = [0, 0]
         self.wins = [0, 0]
-        self.max_undo = 3
         self.player1_color = 'yellow'
         self.player2_color = 'red'
         self.turn = 1
@@ -157,9 +164,20 @@ class ClientGUI:
                 x_cord (int): The X coordination of the mouse on the board.
 
             Returns:
-                column (int): The index of the column in the board.
+                column (int): The index of the column in the board or -1 if out of board.
         """
-        return int(math.floor(x_cord / self.square_size))
+        center_x = self.width // 2
+        leftmost = center_x - (self.square_size * (self.cols // 2))
+        rightmost = center_x + (self.square_size * (self.cols // 2))
+        if self.cols % 2 != 0:
+            leftmost -= 0.5 * self.square_size
+            rightmost += 0.5 * self.square_size
+        
+        if not leftmost <= x_cord <= rightmost:
+            return -1
+        
+        board_x = x_cord - leftmost
+        return int(math.floor(board_x / self.square_size))
 
     def calc_window_size(self) -> None:
         """
@@ -172,7 +190,7 @@ class ClientGUI:
         while True:
             #    calculate the total width and height based on the squares size
             self.width = self.cols * self.square_size
-            self.height = (self.rows + self.options_rows) * self.square_size
+            self.height = (self.rows + self.options_rows) * self.square_size + self.bottom_rows * self.square_size // 2
 
             #   size of circle radius based on the squares
             self.radius = int(self.square_size / 2 - 5)
@@ -184,6 +202,8 @@ class ClientGUI:
             #   client's size is bigger than the user's screen, reduce the size
             self.square_size -= 10
             self.font_size -= 2
+
+        self.min_width, self.min_height = self.width, self.height
 
         self.logger.debug(
             'window size (width={}, height={}), radius={}, square_size={}, font_size={}'.format(self.width, self.height,
@@ -226,15 +246,14 @@ class ClientGUI:
         """
         Creates the client's gui.
         """
-
         #   set an icon and initiate the gui
         icon = pygame.image.load('assets/icon.png')
         pygame.display.set_icon(icon)
         pygame.init()  # initiate the pyGame module
         pygame.mouse.set_cursor(pygame.cursors.tri_left)
 
-        #   create the main display with black background, pygame.SHOWN flags is used as a topmost
-        self.main_display = pygame.display.set_mode((self.width, self.height), pygame.SHOWN)
+        #   create the main display with black background
+        self.main_display = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
         self.main_display.fill(utils.get_color('black'))
 
         self.font_style = pygame.font.match_font('segoeuisymbol')
@@ -246,6 +265,20 @@ class ClientGUI:
 
         pygame.display.update()
         pygame.display.set_caption('Client {}'.format(self.id))
+        
+        bottom_font = pygame.font.Font(self.font_style, self.font_size // 2)
+        txt = 'Rows={}, Columns={}, N={}, Undos={}'.format(self.rows, self.cols, self.n, self.max_undo)
+        text = bottom_font.render(txt, True, utils.get_color('gray'), utils.get_color('black'))
+
+        leftmost = self.width // 2 - (self.square_size * (self.cols // 2))
+        if self.cols % 2 != 0:
+            leftmost -= 0.5 * self.square_size
+
+        board_bottom = (self.options_rows + self.rows) * self.square_size
+
+        text_rect = text.get_rect()
+        text_rect.topleft = (2 + leftmost, board_bottom)
+        self.main_display.blit(text, text_rect)
 
         #   draw the board itself and the top bar
         self.draw_board()
@@ -255,6 +288,10 @@ class ClientGUI:
         Draws the board with its current state.
         """
         board_top_offset = self.options_rows * self.square_size
+        cols_offset = self.square_size * (self.cols // 2)
+        if self.cols % 2 != 0:
+            cols_offset += 0.5 * self.square_size
+        left_offset = int((self.main_display.get_rect().width // 2) - cols_offset)
 
         #   iterates over the rows and cols
         for r in range(self.rows):
@@ -264,14 +301,14 @@ class ClientGUI:
                     self.main_display,
                     utils.get_color('blue'),
                     (
-                        c * self.square_size,
+                        c * self.square_size + left_offset,
                         r * self.square_size + board_top_offset,
                         self.square_size,
                         self.square_size
                     )
                 )
 
-                center_x = int(c * self.square_size + self.square_size / 2)
+                center_x = int(c * self.square_size + self.square_size // 2 + left_offset)
                 center_y = int(r * self.square_size + board_top_offset + self.square_size / 2)
 
                 #   second, add a circle with the player's color, or black if empty cell
@@ -294,7 +331,8 @@ class ClientGUI:
 
         #   calculate the center of the text to place it in the center of the window
         text_rect = text.get_rect()
-        text_rect.center = (self.width // 2, (self.square_size * self.options_rows) - (self.square_size // 3))
+        text_rect.centerx = (self.width // 2)
+        text_rect.top = (self.square_size * (self.options_rows - 1))
         self.main_display.blit(text, text_rect)
         self.logger.debug('draw text={}, color={}'.format(txt, color_to_use))
 
@@ -308,20 +346,57 @@ class ClientGUI:
         text_1 = self.font.render(player1_score, True, utils.get_color(self.player1_color), utils.get_color('black'))
         text_2 = self.font.render(player2_score, True, utils.get_color(self.player2_color), utils.get_color('black'))
         text_c = self.font.render(':', True, utils.get_color('gray'), utils.get_color('black'))
+        text_title = self.font.render('Scores:', True, utils.get_color('gray'), utils.get_color('black'))
 
         text_rect_1 = text_1.get_rect()
         text_rect_2 = text_2.get_rect()
         text_rect_c = text_c.get_rect()
+        text_rect_title = text_title.get_rect()
 
-        offset = 20
+        offset = 10
 
         text_rect_1.right = (self.width // 2 - offset)
         text_rect_2.left = (self.width // 2 + offset)
         text_rect_c.centerx = (self.width // 2)
+        text_rect_title.right = text_rect_1.left - offset
 
         self.main_display.blit(text_1, text_rect_1)
         self.main_display.blit(text_2, text_rect_2)
         self.main_display.blit(text_c, text_rect_c)
+        self.main_display.blit(text_title, text_rect_title)
+
+    def draw_undo(self) -> None:
+        """
+        Draw the undo count for each player.
+        """
+        player1_count, player2_count = str(self.undo_counts[0]), str(self.undo_counts[1])
+
+        self.font.set_bold(True)
+        text_title = self.font.render('Undos:', True, utils.get_color('gray'), utils.get_color('black'))
+        text_1 = self.font.render(player1_count, True, utils.get_color(self.player1_color), utils.get_color('black'))
+        text_2 = self.font.render(player2_count, True, utils.get_color(self.player2_color), utils.get_color('black'))
+        text_sep = self.font.render('|', True, utils.get_color('gray'), utils.get_color('black'))
+
+        text_rect_title = text_title.get_rect()
+        text_rect_1 = text_1.get_rect()
+        text_rect_2 = text_2.get_rect()
+        text_rect_sep = text_sep.get_rect()
+
+        offset = 10
+
+        text_rect_1.right = (self.width // 2 - offset)
+        text_rect_1.top = (self.square_size)
+        text_rect_2.left = (self.width // 2 + offset)
+        text_rect_2.top = (self.square_size)
+        text_rect_sep.centerx = (self.width // 2)
+        text_rect_sep.top = (self.square_size)
+        text_rect_title.right = (text_rect_1.left - offset)
+        text_rect_title.top = (self.square_size)
+
+        self.main_display.blit(text_1, text_rect_1)
+        self.main_display.blit(text_2, text_rect_2)
+        self.main_display.blit(text_title, text_rect_title)
+        self.main_display.blit(text_sep, text_rect_sep)
 
     def draw_main_menu(self) -> None:
         """
@@ -332,7 +407,11 @@ class ClientGUI:
         y_num_squares = 3
 
         #   calculates the X and Y coordinates based on the size of the rectangles of the board
-        x = int(((self.cols / 2) - x_num_squares / 2) * self.square_size)
+        center_x = self.width // 2
+        leftmost = center_x - (self.square_size * (self.cols // 2))
+        if self.cols % 2 != 0:
+            leftmost -= 0.5 * self.square_size
+        x = int((((self.cols / 2) - x_num_squares / 2) * self.square_size) + leftmost)
         y = int((((self.rows / 2) - y_num_squares / 2) * self.square_size) + self.square_size * self.options_rows)
 
         #   draw the main rectangle of the menu
@@ -366,23 +445,28 @@ class ClientGUI:
         self.main_display.blit(text, self.player2_text)
 
         #   draw players colors
-        right_most = max(self.player1_text.right, self.player2_text.right)
 
-        self.player1_circle = self.draw_circle(self.player1_color, (right_most + 40, y + row_offset * 2),
-                                               radius=self.radius // 2)
+        little_radius = int(self.radius // 2)
 
-        self.player2_circle = self.draw_circle(self.player2_color, (right_most + 40, y + row_offset * 4),
-                                               radius=self.radius // 2)
+        self.player1_circle = self.draw_circle(
+            self.player1_color,
+            (self.main_menu.right - (little_radius * 2), y + row_offset * 2),
+            radius=little_radius)
+
+        self.player2_circle = self.draw_circle(
+            self.player2_color,
+            (self.main_menu.right - (little_radius * 2), y + row_offset * 4),
+            radius=little_radius)
 
         #   define and draw start button
         if not self.start_button:
             x_num_squares = 3
             y_num_squares = 0.75
 
-            x = int(((self.cols / 2) - x_num_squares / 2) * self.square_size)
+            x = int(((self.cols / 2) - x_num_squares / 2) * self.square_size) + leftmost
             width = int(self.square_size * x_num_squares)
             height = int(self.square_size * y_num_squares)
-            y = int(self.main_menu.bottom - height - 20)
+            y = int(self.main_menu.bottom - height - 4)
 
             self.start_button = Button(position=(x, y), size=(width, height), btn_color='blue',
                                        callback=self.handle_start, is_active=True, text='Start Game', txt_color='black',
@@ -425,11 +509,18 @@ class ClientGUI:
         self.clear_top(entire=False)
         #   get the column index of the mouse
         col = self.calc_col_by_mouse(mouse_x)
+        if not self.cols > col >= 0:
+            return
         #   select the user color or an invalid location color based on the board state
         color_to_use = self.get_turn_color() if utils.is_valid_location(col, self.board) else 'gray'
         # calculate the x axis of the circle and draw
+        cols_offset = self.square_size * (self.cols // 2)
+        if self.cols % 2 != 0:
+            cols_offset += 0.5 * self.square_size
+        left_offset = int((self.main_display.get_rect().width // 2) - cols_offset)
+    
         circle_x = int(col * self.square_size + self.square_size / 2)
-        self.draw_circle(color_to_use, (circle_x, int(self.square_size * self.options_rows - self.radius)))
+        self.draw_circle(color_to_use, (circle_x + left_offset, int(self.square_size * self.options_rows - self.radius)))
 
     def clear_top(self, entire=True) -> None:
         """
@@ -478,15 +569,16 @@ class ClientGUI:
         """
         Create the undo button with its position, size and callback.
         """
-        if self.undo_counts[self.turn - 1] >= self.max_undo:
-            return
-
         #   define the span in each axis
         x_num_squares = 0.5
         y_num_squares = 0.5
 
         #   calculates the X and Y coordinates based on the size of the rectangles of the board
-        x = 0
+        center_x = self.width // 2
+        leftmost = center_x - (self.square_size * (self.cols // 2))
+        if self.cols % 2 != 0:
+            leftmost -= 0.5 * self.square_size
+        x = leftmost
         y = 0
         width = int(self.square_size * x_num_squares)
         height = int(self.square_size * y_num_squares)
@@ -504,7 +596,11 @@ class ClientGUI:
         y_num_squares = 0.75
 
         #   calculates the X and Y coordinates based on the size of the rectangles of the board
-        x = int(((self.cols / 2) - x_num_squares / 2) * self.square_size)
+        center_x = self.width // 2
+        leftmost = center_x - (self.square_size * (self.cols // 2))
+        if self.cols % 2 != 0:
+            leftmost -= 0.5 * self.square_size
+        x = int((((self.cols / 2) - x_num_squares / 2) * self.square_size) + leftmost)
         y = int((((self.rows / 2) - y_num_squares / 2) * self.square_size) + self.square_size * self.options_rows)
         width = int(self.square_size * x_num_squares)
         height = int(self.square_size * y_num_squares)
@@ -578,11 +674,12 @@ class ClientGUI:
         Undo the last move.
         """
         self.logger.debug('undo button pressed')
-        if self.undo_counts[self.turn - 1] < self.max_undo:
+        my_turn = 0 if self.turn == 2 else 1
+        if self.undo_counts[my_turn] < self.max_undo:
             self.client_socket.send(bytes(str(Actions.UNDO.value), 'utf8'))
             if self.caretaker.undo():
                 self.board = self.origin.get_state()
-                self.undo_counts[self.turn - 1] += 1
+                self.undo_counts[my_turn] += 1
                 self.change_turn()
 
     def change_turn(self) -> None:
@@ -612,6 +709,16 @@ class ClientGUI:
 
             #   iterate over the pygame events
             for event in pygame.event.get():
+                if event.type == pygame.VIDEORESIZE:
+                    w = self.min_width if event.w < self.min_width else event.w
+                    h = self.min_height if event.h < self.min_height else event.h
+                    self.width, self.height = w, h
+                    prev_undo_active = self.undo_button.is_active
+                    self.create_gui()
+                    self.draw_scores()
+                    self.undo_button.set_active(prev_undo_active)
+                    self.undo_button.draw(self.main_display)
+
                 #   if exit event
                 if event.type == pygame.QUIT:
                     self.logger.debug('pygame exit event')
@@ -633,6 +740,7 @@ class ClientGUI:
                         self.undo_button.set_active(False)
                         self.clear_top()
                         self.draw_moving_piece(event.pos[0])
+                        self.draw_undo()
                         continue
 
                 if self.state == Actions.WIN or self.state == Actions.TIE:
@@ -682,11 +790,10 @@ class ClientGUI:
                             elif Actions.WIN.is_equals(action) or Actions.TIE.is_equals(action):
                                 self.draw_game_over(is_win=Actions.WIN.is_equals(action))
                             elif Actions.CONTINUE.is_equals(action):
-                                self.change_turn()
                                 self.logger.debug('current turn({})'.format(self.turn))
                                 if self.undo_counts[self.turn - 1] < self.max_undo:
-                                    self.undo_button.text_color = self.get_other_turn_color()
                                     self.undo_button.set_active(True)
+                                self.change_turn()
 
                 #   if the mouse hovering over the board, draw the top moving circle
                 if event.type == pygame.MOUSEMOTION or event.type == pygame.MOUSEBUTTONUP:
@@ -700,6 +807,9 @@ class ClientGUI:
             if should_draw_board:
                 self.draw_board()
                 should_draw_board = False
+
+            if self.state == Actions.READY:
+                self.draw_undo()
 
             if self.state == Actions.WIN or self.state == Actions.TIE:
                 self.reset_button.set_active(True)

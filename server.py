@@ -36,10 +36,12 @@ class ServerGUI(tk.Tk):
         self.n = 4
 
         self.n_frame = None
-        self.n_value = None
         self.spin_frame = None
+        self.undo_frame = None
+        self.n_value = None
         self.rowsBox = None
         self.colsBox = None
+        self.undo_value = None
         self.start_game_button = None
         self.server_socket = None
         self.host = ''
@@ -72,8 +74,7 @@ class ServerGUI(tk.Tk):
         self.iconphoto(False, tk.PhotoImage(file='assets/icon.png'))
         self.geometry('{}x{}'.format(ServerGUI.HEIGHT, ServerGUI.WIDTH))
         self.minsize(ServerGUI.HEIGHT, ServerGUI.WIDTH)
-        self.maxsize(ServerGUI.HEIGHT, ServerGUI.WIDTH)
-        self.resizable(False, False)
+        self.resizable(True, True)
         # on exit event, run the close_all functions
         self.protocol("WM_DELETE_WINDOW", self.close_all)
 
@@ -103,6 +104,16 @@ class ServerGUI(tk.Tk):
         tk.Label(self.spin_frame, text=" X ", font=Font(family='Helvetica', size=20, weight='bold')).grid(row=0,
                                                                                                           column=1)
         self.spin_frame.pack()
+
+        #   define n-in-a-row frame
+        self.undo_frame = tk.Frame(self)
+        undo_val = tk.StringVar(value='3')
+        self.undo_value = tk.Spinbox(self.undo_frame, textvariable=undo_val, from_=0, to=3, width=2,
+                                  font=Font(family='Helvetica', size=20, weight='bold'), state='readonly')
+        self.undo_value.grid(row=0, column=1)
+        tk.Label(self.undo_frame, text="Max undo: ", font=Font(family='Helvetica', size=20, weight='bold')).grid(row=0,
+                                                                                                             column=0)
+        self.undo_frame.pack()
 
         #   define start button
         self.start_game_button = tk.Button(self, text='Start Play',
@@ -135,10 +146,12 @@ class ServerGUI(tk.Tk):
         if n > cols and n > rows:
             return
 
+        max_undo = int(self.undo_value.get())
+
         self.client_id += 1
         #   creates new process to start the client's gui on
         client_process = multiprocessing.Process(target=ClientGUI,
-                                                 args=(self.client_id, self.queue, self.log_level, (rows, cols)))
+                                                 args=(self.client_id, self.queue, self.log_level, (rows, cols), n, max_undo))
         client_process.start()
         self.logger.info('created Client({}) with board size (rows={}, cols={})'.format(self.client_id, rows, cols))
 
